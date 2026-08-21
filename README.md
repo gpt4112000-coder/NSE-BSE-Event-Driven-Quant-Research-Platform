@@ -1,5 +1,7 @@
 # NSE-BSE Event-Driven Quant Research Platform
 
+> **Live animated documentation:** https://kondaiahpola1-wq.github.io/indian-quant-infrastructure/ (mirror: https://gpt4112000-coder.github.io/indian-quant-infrastructure/)
+
 Indian quant research & market infrastructure built around three external systems:
 
 | System | Role |
