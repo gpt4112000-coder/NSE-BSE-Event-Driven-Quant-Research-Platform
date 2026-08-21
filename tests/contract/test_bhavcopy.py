@@ -52,6 +52,8 @@ def test_delivery_csv_parsing():
         "CLOSE_PRICE,AVG_PRICE,TTL_TRD_QNTY,TURNOVER_LACS,NO_OF_TRADES,DELIV_QTY,DELIV_PER\n"
         "RELIANCE,EQ,18-AUG-2026,1305.00,1314.00,1328.60,1311.20,1320.00,1322.00,"
         "1320.15,10180567,134453.19,187432,6012345,59.06\n"
+        "BADROW,EQ,18-AUG-2026,1,2,3,4,5,x,7,8,9,10,11,-\n"
     )
     out = parse_delivery_csv(text)
-    assert out["RELIANCE"] == pytest.approx(59.06)
+    assert out["RELIANCE"]["close"] == pytest.approx(1322.0)
+    assert out["RELIANCE"]["deliv_pct"] == pytest.approx(59.06)

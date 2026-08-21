@@ -74,6 +74,19 @@ class MetadataStore:
                 n_warnings INTEGER,
                 report_json TEXT NOT NULL
             );
+            CREATE TABLE IF NOT EXISTS symbol_events (
+                event_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                isin TEXT NOT NULL,
+                exchange TEXT NOT NULL,
+                event_type TEXT NOT NULL,
+                from_symbol TEXT,
+                to_symbol TEXT,
+                effective_date TEXT NOT NULL,
+                note TEXT,
+                source TEXT,
+                recorded_at TEXT NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_symbol_events_isin ON symbol_events(isin, effective_date);
             CREATE INDEX IF NOT EXISTS idx_jobs_tool ON jobs(tool, started_at);
             CREATE INDEX IF NOT EXISTS idx_runs_kind ON runs(kind, started_at);
             """
@@ -165,6 +178,58 @@ class MetadataStore:
         )
         self._con.commit()
         return int(cur.lastrowid or 0)
+
+    def record_symbol_event(
+        self,
+        *,
+        isin: str,
+        exchange: str,
+        event_type: str,
+        effective_date: str,
+        from_symbol: str | None = None,
+        to_symbol: str | None = None,
+        note: str | None = None,
+        source: str = "MANUAL",
+    ) -> int:
+        if event_type not in ("RENAME", "SUSPENSION", "DELISTING", "SEGMENT_MIGRATION"):
+            raise ValueError(f"unknown symbol event type: {event_type}")
+        cur = self._con.execute(
+            """INSERT INTO symbol_events
+               (isin, exchange, event_type, from_symbol, to_symbol, effective_date,
+                note, source, recorded_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (isin.upper(), exchange.upper(), event_type, from_symbol, to_symbol,
+             effective_date, note, source, _now()),
+        )
+        self._con.commit()
+        return int(cur.lastrowid or 0)
+
+    def symbol_events_for_isin(self, isin: str) -> list[dict]:
+        rows = self._con.execute(
+            """SELECT * FROM symbol_events WHERE isin = ? ORDER BY effective_date""",
+            (isin.upper(),),
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+    def current_symbol_for_isin(self, isin: str, exchange: str, as_of: str) -> str | None:
+        """Symbol valid for an ISIN as of a date, applying recorded events.
+
+        ISIN-keyed stitching is the canonical way to build continuous history
+        across renames and migrations.
+        """
+        events = [
+            e for e in self.symbol_events_for_isin(isin)
+            if e["exchange"] == exchange.upper() and e["effective_date"] <= as_of
+        ]
+        symbol: str | None = None
+        for event in events:
+            if event["event_type"] == "DELISTING":
+                return None
+            if event["to_symbol"]:
+                symbol = event["to_symbol"]
+            elif event["from_symbol"] and symbol is None:
+                symbol = event["from_symbol"]
+        return symbol
 
     def close(self) -> None:
         self._con.close()

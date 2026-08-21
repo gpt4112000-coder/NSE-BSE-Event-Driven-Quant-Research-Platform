@@ -11,6 +11,7 @@ Sources:
 
 from __future__ import annotations
 
+import contextlib
 import csv
 import io
 import zipfile
@@ -31,7 +32,7 @@ from indian_quant.schemas import (
 from indian_quant.storage.raw_store import RawStore
 
 CM_URL = "https://nsearchives.nseindia.com/content/cm/BhavCopy_NSE_CM_0_0_0_{yyyymmdd}_F_0000.csv.zip"
-DELIVERY_URL = "https://narchives.nseindia.com/products/content/sec_bhavdata_full_{ddmmyyyy}.csv"
+DELIVERY_URL = "https://nsearchives.nseindia.com/products/content/sec_bhavdata_full_{ddmmyyyy}.csv"
 
 CASH_SERIES = {"EQ", "BE", "BZ"}
 
@@ -50,6 +51,28 @@ class BhavcopyIngester:
     def __init__(self, raw_store: RawStore, *, timeout: float = 60.0) -> None:
         self.raw_store = raw_store
         self.timeout = timeout
+
+    def fetch_delivery_csv(self, day: date) -> tuple[str | None, str]:
+        """Fetch the sec_bhavdata_full delivery file; returns (csv_text, hash)."""
+        ddmmyyyy = day.strftime("%d%m%Y")
+        resp = httpx.get(
+            DELIVERY_URL.format(ddmmyyyy=ddmmyyyy), headers=HEADERS,
+            timeout=self.timeout, follow_redirects=True,
+        )
+        if resp.status_code in (404, 403):
+            return None, f"unavailable:{resp.status_code}"
+        resp.raise_for_status()
+        text = resp.text
+        if text.lstrip()[:1] == "<":
+            return None, "blocked"
+        _, digest = self.raw_store.save(
+            source="nse",
+            tool="bhavcopy_delivery_sec",
+            payload=text.encode(),
+            ext="csv",
+            request_meta={"date": day.isoformat(), "url": str(resp.url)},
+        )
+        return text, digest
 
     def fetch_cm_zip(self, day: date) -> tuple[bytes | None, str]:
         """Download the CM bhavcopy zip for a trading day; persist raw bytes."""
@@ -140,19 +163,29 @@ class BhavcopyIngester:
         return all_bars
 
 
-def parse_delivery_csv(text: str) -> dict[str, float]:
-    """Parse sec_bhavdata_full delivery CSV -> {symbol: delivery_pct}."""
-    out: dict[str, float] = {}
+def parse_delivery_csv(text: str) -> dict[str, dict[str, float]]:
+    """Parse sec_bhavdata_full delivery CSV.
+
+    Returns {symbol: {"close": float, "deliv_pct": float|None}}.
+    """
+    out: dict[str, dict[str, float]] = {}
     reader = csv.DictReader(io.StringIO(text))
     for row in reader:
         cleaned = {(k or "").strip(): (v or "").strip() for k, v in row.items()}
         symbol = cleaned.get("SYMBOL", "")
+        series = cleaned.get("SERIES", "")
+        if not symbol or series not in ("EQ", "BE", "BZ"):
+            continue
+        rec: dict[str, float] = {}
+        try:
+            rec["close"] = float(cleaned.get("CLOSE_PRICE", ""))
+        except ValueError:
+            continue
         pct = cleaned.get("DELIV_PER", "")
-        if symbol and pct not in ("", "-"):
-            try:
-                out[symbol] = float(pct)
-            except ValueError:
-                continue
+        if pct not in ("", "-"):
+            with contextlib.suppress(ValueError):
+                rec["deliv_pct"] = float(pct)
+        out[symbol] = rec
     return out
 
 
