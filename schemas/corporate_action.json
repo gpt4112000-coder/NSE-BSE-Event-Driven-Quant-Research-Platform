@@ -1,0 +1,218 @@
+{
+  "$defs": {
+    "CorporateActionType": {
+      "enum": [
+        "DIVIDEND",
+        "BONUS",
+        "SPLIT",
+        "RIGHTS",
+        "MERGER",
+        "DEMERGER",
+        "BUYBACK",
+        "OTHER"
+      ],
+      "title": "CorporateActionType",
+      "type": "string"
+    }
+  },
+  "description": "A corporate action event keyed to a canonical instrument.",
+  "properties": {
+    "action_type": {
+      "$ref": "#/$defs/CorporateActionType"
+    },
+    "amount": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Amount"
+    },
+    "announcement_date": {
+      "anyOf": [
+        {
+          "format": "date",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Announcement Date"
+    },
+    "document_url": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Document Url"
+    },
+    "effective_date": {
+      "anyOf": [
+        {
+          "format": "date",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Effective Date"
+    },
+    "ex_date": {
+      "anyOf": [
+        {
+          "format": "date",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Ex Date"
+    },
+    "extra": {
+      "additionalProperties": true,
+      "title": "Extra",
+      "type": "object"
+    },
+    "ingestion_timestamp": {
+      "anyOf": [
+        {
+          "format": "date-time",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Ingestion Timestamp"
+    },
+    "instrument_id": {
+      "title": "Instrument Id",
+      "type": "string"
+    },
+    "isin": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Isin"
+    },
+    "new_value": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "New Value"
+    },
+    "old_value": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Old Value"
+    },
+    "ratio": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Ratio"
+    },
+    "raw_payload_hash": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Raw Payload Hash"
+    },
+    "record_date": {
+      "anyOf": [
+        {
+          "format": "date",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Record Date"
+    },
+    "source": {
+      "title": "Source",
+      "type": "string"
+    },
+    "source_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Source Id"
+    },
+    "source_timestamp": {
+      "anyOf": [
+        {
+          "format": "date-time",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Source Timestamp"
+    }
+  },
+  "required": [
+    "instrument_id",
+    "action_type",
+    "source"
+  ],
+  "title": "CorporateAction",
+  "type": "object"
+}

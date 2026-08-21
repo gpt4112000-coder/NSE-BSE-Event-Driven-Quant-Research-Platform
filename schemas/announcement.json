@@ -1,0 +1,131 @@
+{
+  "properties": {
+    "announcement_id": {
+      "title": "Announcement Id",
+      "type": "string"
+    },
+    "category": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Category"
+    },
+    "description": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Description"
+    },
+    "document_url": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Document Url"
+    },
+    "event_date": {
+      "anyOf": [
+        {
+          "format": "date",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Event Date"
+    },
+    "exchange": {
+      "title": "Exchange",
+      "type": "string"
+    },
+    "extra": {
+      "additionalProperties": true,
+      "title": "Extra",
+      "type": "object"
+    },
+    "headline": {
+      "title": "Headline",
+      "type": "string"
+    },
+    "ingestion_timestamp": {
+      "anyOf": [
+        {
+          "format": "date-time",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Ingestion Timestamp"
+    },
+    "instrument_id": {
+      "title": "Instrument Id",
+      "type": "string"
+    },
+    "published_at": {
+      "format": "date-time",
+      "title": "Published At",
+      "type": "string"
+    },
+    "raw_document_hash": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Raw Document Hash"
+    },
+    "source": {
+      "title": "Source",
+      "type": "string"
+    },
+    "source_timestamp": {
+      "anyOf": [
+        {
+          "format": "date-time",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Source Timestamp"
+    }
+  },
+  "required": [
+    "announcement_id",
+    "instrument_id",
+    "exchange",
+    "published_at",
+    "headline",
+    "source"
+  ],
+  "title": "Announcement",
+  "type": "object"
+}

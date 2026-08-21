@@ -1,0 +1,133 @@
+"""Upstox REST client: Historical Candle Data V3 -> canonical MarketBar contracts.
+
+Endpoint: GET /v3/historical-candle/{instrument_key}/{unit}/{interval}/{to_date}/{from_date}
+Auth: Bearer access token. Instrument keys use the canonical Upstox format,
+e.g. ``NSE_EQ|INE002A01018`` - which is why our canonical ids were designed
+with the same EXCHANGE_SEGMENT|LOCAL_ID shape.
+"""
+
+from __future__ import annotations
+
+from datetime import UTC, date, datetime
+from typing import Any
+
+import httpx
+
+from indian_quant.schemas import AdjustmentStatus, MarketBar, Timeframe
+from indian_quant.storage.raw_store import RawStore
+
+BASE_URL = "https://api.upstox.com/v3"
+
+UNIT_FOR_TIMEFRAME = {
+    Timeframe.MIN_1: ("minutes", 1),
+    Timeframe.MIN_5: ("minutes", 5),
+    Timeframe.MIN_15: ("minutes", 15),
+    Timeframe.MIN_30: ("minutes", 30),
+    Timeframe.MIN_60: ("hours", 1),
+    Timeframe.DAY: ("days", 1),
+    Timeframe.WEEK: ("weeks", 1),
+    Timeframe.MONTH: ("months", 1),
+}
+
+
+class UpstoxRestClient:
+    def __init__(
+        self,
+        access_token: str | None = None,
+        *,
+        raw_store: RawStore | None = None,
+        base_url: str = BASE_URL,
+        timeout: float = 30.0,
+    ) -> None:
+        self.access_token = access_token
+        self.raw_store = raw_store
+        self.base_url = base_url
+        self.timeout = timeout
+
+    def _headers(self) -> dict[str, str]:
+        headers = {"Accept": "application/json"}
+        if self.access_token:
+            headers["Authorization"] = f"Bearer {self.access_token}"
+        return headers
+
+    def historical_candles(
+        self,
+        instrument_key: str,
+        unit: str,
+        interval: int | str,
+        to_date: date | str,
+        from_date: date | str | None = None,
+    ) -> dict[str, Any]:
+        to_s = to_date.isoformat() if isinstance(to_date, date) else to_date
+        path = f"/historical-candle/{instrument_key}/{unit}/{interval}/{to_s}"
+        if from_date is not None:
+            from_s = from_date.isoformat() if isinstance(from_date, date) else from_date
+            path += f"/{from_s}"
+        resp = httpx.get(
+            f"{self.base_url}{path}",
+            headers=self._headers(),
+            timeout=self.timeout,
+        )
+        resp.raise_for_status()
+        payload = resp.json()
+        if self.raw_store:
+            body = resp.content
+            self.raw_store.save(
+                source="upstox",
+                tool="historical_candle_v3",
+                payload=body,
+                request_meta={"instrument_key": instrument_key, "unit": unit, "interval": interval},
+            )
+        return payload
+
+    def candles_to_bars(
+        self,
+        payload: dict[str, Any],
+        *,
+        instrument_id: str,
+        exchange: str,
+        timeframe: Timeframe,
+    ) -> list[MarketBar]:
+        candles = (payload.get("data") or {}).get("candles") or []
+        bars: list[MarketBar] = []
+        for row in candles:
+            if len(row) < 6:
+                continue
+            ts_raw, o, h, low, c, v = row[0], row[1], row[2], row[3], row[4], row[5]
+            oi = row[6] if len(row) > 6 else None
+            ts = datetime.fromisoformat(str(ts_raw)).astimezone(UTC)
+            bars.append(
+                MarketBar(
+                    instrument_id=instrument_id,
+                    exchange=exchange,
+                    timestamp=ts,
+                    timeframe=timeframe,
+                    open=float(o),
+                    high=float(h),
+                    low=float(low),
+                    close=float(c),
+                    volume=float(v),
+                    open_interest=float(oi) if oi is not None else None,
+                    source="UPSTOX",
+                    source_timestamp=ts,
+                    ingestion_timestamp=datetime.now(UTC),
+                    adjustment_status=AdjustmentStatus.UNADJUSTED,
+                )
+            )
+        return bars
+
+    def get_bars(
+        self,
+        *,
+        instrument_key: str,
+        instrument_id: str,
+        exchange: str = "NSE",
+        timeframe: Timeframe = Timeframe.DAY,
+        to_date: date | str,
+        from_date: date | str | None = None,
+    ) -> list[MarketBar]:
+        unit, interval = UNIT_FOR_TIMEFRAME[timeframe]
+        payload = self.historical_candles(instrument_key, unit, interval, to_date, from_date)
+        return self.candles_to_bars(
+            payload, instrument_id=instrument_id, exchange=exchange, timeframe=timeframe
+        )

@@ -1,0 +1,9 @@
+defaults: development
+
+backtest:
+  venue: NSE
+  account_type: CASH
+  starting_balance_inr: 1000000
+  catalog_path: data/catalog
+  fill_prob: 1.0
+  slippage_ticks: 0

@@ -1,0 +1,34 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+
+# Data (keep structure, ignore contents)
+data/raw/**
+data/normalized/**
+data/validated/**
+data/catalog/**
+data/research.duckdb
+data/metadata.db
+!data/**/.gitkeep
+
+# Notebooks
+.ipynb_checkpoints/
+
+# Env & secrets
+.env
+.env.*
+*.token
+
+# OS / editors
+.DS_Store
+.idea/
+.vscode/
+
+# Rust
+rust/target/

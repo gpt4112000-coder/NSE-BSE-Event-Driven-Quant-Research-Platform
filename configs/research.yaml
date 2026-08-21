@@ -1,0 +1,13 @@
+defaults: development
+
+paths:
+  data_root: data
+
+storage:
+  duckdb_path: data/research.duckdb
+  metadata_dsn: sqlite:///data/metadata.db
+
+quality:
+  max_gap_days: 10
+  price_tolerance_pct: 0.5
+  fail_on_error: false

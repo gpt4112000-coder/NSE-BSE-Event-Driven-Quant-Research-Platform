@@ -1,0 +1,27 @@
+version: "3.9"
+
+services:
+  mcp:
+    image: node:22-alpine
+    container_name: nse-bse-mcp
+    working_dir: /srv
+    command: sh -c "npx -y nse-bse-mcp"
+    ports:
+      - "3000:3000"
+    restart: unless-stopped
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: indian-quant-metadata
+    environment:
+      POSTGRES_USER: quant
+      POSTGRES_PASSWORD: quant
+      POSTGRES_DB: indian_quant_metadata
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    restart: unless-stopped
+
+volumes:
+  pgdata:

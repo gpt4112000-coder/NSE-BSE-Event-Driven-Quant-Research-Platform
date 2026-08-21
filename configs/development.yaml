@@ -1,0 +1,35 @@
+defaults: development
+
+paths:
+  data_root: data
+
+mcp:
+  base_url: http://localhost:3000/mcp
+  transport: http
+  timeout_seconds: 60
+  max_retries: 3
+
+storage:
+  raw_layout: source/tool/date
+  parquet_compression: zstd
+  duckdb_path: data/research.duckdb
+  metadata_dsn: sqlite:///data/metadata.db
+
+quality:
+  max_gap_days: 10
+  price_tolerance_pct: 0.5
+  fail_on_error: false
+
+upstox:
+  enabled: false
+  sandbox: true
+  api_key_env: UPSTOX_API_KEY
+  access_token_env: UPSTOX_ACCESS_TOKEN
+  ws_url: wss://api.upstox.com/v3/feed/market-data-feed
+  instrument_master_url: https://assets.upstox.com/market-quote/instruments/exchange/complete.csv.gz
+
+backtest:
+  venue: NSE
+  account_type: CASH
+  starting_balance_inr: 1000000
+  catalog_path: data/catalog

@@ -1,0 +1,212 @@
+{
+  "$defs": {
+    "Exchange": {
+      "enum": [
+        "NSE",
+        "BSE"
+      ],
+      "title": "Exchange",
+      "type": "string"
+    },
+    "Lineage": {
+      "properties": {
+        "ingestion_timestamp": {
+          "format": "date-time",
+          "title": "Ingestion Timestamp",
+          "type": "string"
+        },
+        "raw_hash": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Raw Hash"
+        },
+        "schema_version": {
+          "default": 1,
+          "title": "Schema Version",
+          "type": "integer"
+        },
+        "source": {
+          "title": "Source",
+          "type": "string"
+        },
+        "source_request_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Source Request Id"
+        },
+        "source_timestamp": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Source Timestamp"
+        },
+        "source_tool": {
+          "title": "Source Tool",
+          "type": "string"
+        }
+      },
+      "required": [
+        "source",
+        "source_tool"
+      ],
+      "title": "Lineage",
+      "type": "object"
+    },
+    "OptionType": {
+      "enum": [
+        "CE",
+        "PE"
+      ],
+      "title": "OptionType",
+      "type": "string"
+    },
+    "SecurityType": {
+      "enum": [
+        "EQUITY",
+        "INDEX",
+        "ETF",
+        "SGB",
+        "FUTURE",
+        "OPTION",
+        "MUTUAL_FUND",
+        "BOND"
+      ],
+      "title": "SecurityType",
+      "type": "string"
+    },
+    "Segment": {
+      "enum": [
+        "EQ",
+        "SME",
+        "FO",
+        "MF",
+        "DEBT",
+        "IDX",
+        "CURRENCY",
+        "COMMODITY"
+      ],
+      "title": "Segment",
+      "type": "string"
+    }
+  },
+  "description": "A single listed option contract; never mixed with equity records.",
+  "properties": {
+    "currency": {
+      "default": "INR",
+      "title": "Currency",
+      "type": "string"
+    },
+    "exchange": {
+      "$ref": "#/$defs/Exchange"
+    },
+    "expiry": {
+      "format": "date",
+      "title": "Expiry",
+      "type": "string"
+    },
+    "instrument_id": {
+      "title": "Instrument Id",
+      "type": "string"
+    },
+    "isin": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Isin"
+    },
+    "lineage": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Lineage"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "lot_size": {
+      "default": 1,
+      "title": "Lot Size",
+      "type": "integer"
+    },
+    "name": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Name"
+    },
+    "option_type": {
+      "$ref": "#/$defs/OptionType"
+    },
+    "security_type": {
+      "$ref": "#/$defs/SecurityType",
+      "default": "OPTION"
+    },
+    "segment": {
+      "$ref": "#/$defs/Segment",
+      "default": "FO"
+    },
+    "strike": {
+      "title": "Strike",
+      "type": "number"
+    },
+    "symbol": {
+      "title": "Symbol",
+      "type": "string"
+    },
+    "tick_size": {
+      "default": 0.05,
+      "title": "Tick Size",
+      "type": "number"
+    },
+    "underlying": {
+      "title": "Underlying",
+      "type": "string"
+    }
+  },
+  "required": [
+    "instrument_id",
+    "exchange",
+    "symbol",
+    "expiry",
+    "strike",
+    "option_type",
+    "underlying"
+  ],
+  "title": "OptionInstrument",
+  "type": "object"
+}

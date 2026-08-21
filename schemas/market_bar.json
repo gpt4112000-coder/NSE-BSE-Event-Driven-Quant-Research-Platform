@@ -1,0 +1,154 @@
+{
+  "$defs": {
+    "AdjustmentStatus": {
+      "enum": [
+        "UNADJUSTED",
+        "SPLIT_ADJUSTED",
+        "DIVIDEND_ADJUSTED",
+        "FULLY_ADJUSTED",
+        "UNKNOWN"
+      ],
+      "title": "AdjustmentStatus",
+      "type": "string"
+    },
+    "QualityStatus": {
+      "enum": [
+        "RAW",
+        "VALIDATED",
+        "SUSPECT",
+        "REJECTED"
+      ],
+      "title": "QualityStatus",
+      "type": "string"
+    },
+    "Timeframe": {
+      "enum": [
+        "1m",
+        "5m",
+        "15m",
+        "30m",
+        "60m",
+        "1d",
+        "1w",
+        "1M"
+      ],
+      "title": "Timeframe",
+      "type": "string"
+    }
+  },
+  "description": "One OHLCV bar for exactly one canonical instrument and timeframe.",
+  "properties": {
+    "adjustment_status": {
+      "$ref": "#/$defs/AdjustmentStatus",
+      "default": "UNADJUSTED"
+    },
+    "close": {
+      "title": "Close",
+      "type": "number"
+    },
+    "exchange": {
+      "title": "Exchange",
+      "type": "string"
+    },
+    "high": {
+      "title": "High",
+      "type": "number"
+    },
+    "ingestion_timestamp": {
+      "anyOf": [
+        {
+          "format": "date-time",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Ingestion Timestamp"
+    },
+    "instrument_id": {
+      "title": "Instrument Id",
+      "type": "string"
+    },
+    "low": {
+      "title": "Low",
+      "type": "number"
+    },
+    "open": {
+      "title": "Open",
+      "type": "number"
+    },
+    "open_interest": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Open Interest"
+    },
+    "quality_status": {
+      "$ref": "#/$defs/QualityStatus",
+      "default": "RAW"
+    },
+    "raw_hash": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Raw Hash"
+    },
+    "source": {
+      "title": "Source",
+      "type": "string"
+    },
+    "source_timestamp": {
+      "anyOf": [
+        {
+          "format": "date-time",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Source Timestamp"
+    },
+    "timeframe": {
+      "$ref": "#/$defs/Timeframe"
+    },
+    "timestamp": {
+      "format": "date-time",
+      "title": "Timestamp",
+      "type": "string"
+    },
+    "volume": {
+      "default": 0.0,
+      "title": "Volume",
+      "type": "number"
+    }
+  },
+  "required": [
+    "instrument_id",
+    "exchange",
+    "timestamp",
+    "timeframe",
+    "open",
+    "high",
+    "low",
+    "close",
+    "source"
+  ],
+  "title": "MarketBar",
+  "type": "object"
+}

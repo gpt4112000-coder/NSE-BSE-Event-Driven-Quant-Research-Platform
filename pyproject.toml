@@ -1,0 +1,54 @@
+[project]
+name = "indian-quant"
+version = "0.1.0"
+description = "Indian quant research & market infrastructure: NSE/BSE data acquisition, canonical contracts, quality engine, NautilusTrader backtesting, Upstox connectivity."
+readme = "README.md"
+requires-python = ">=3.12"
+license = { text = "MIT" }
+authors = [{ name = "Quant Research" }]
+dependencies = [
+    "pydantic>=2.7",
+    "pandas>=2.2",
+    "numpy>=1.26",
+    "pyarrow>=17.0",
+    "duckdb>=1.0",
+    "httpx>=0.27",
+    "pyyaml>=6.0",
+    "python-dateutil>=2.9",
+    "nautilus_trader>=1.224",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.2",
+    "pytest-asyncio>=0.23",
+    "ruff>=0.5",
+    "mypy>=1.10",
+    "types-pyyaml",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/indian_quant"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+addopts = "-q"
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
+ignore = ["E501"]
+
+[tool.mypy]
+python_version = "3.12"
+ignore_missing_imports = true
+check_untyped_defs = true

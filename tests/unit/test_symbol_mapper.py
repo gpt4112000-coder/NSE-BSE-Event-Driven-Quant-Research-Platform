@@ -1,0 +1,50 @@
+"""Symbol mapper tests."""
+
+import pytest
+
+from indian_quant.instruments import SymbolMapper
+from indian_quant.schemas import Exchange, InstrumentIdentity, Segment
+
+
+def identity(symbol="RELIANCE", isin="INE002A01018"):
+    return InstrumentIdentity(
+        instrument_id=f"NSE_EQ|{symbol}",
+        exchange=Exchange.NSE,
+        segment=Segment.EQ,
+        symbol=symbol,
+        isin=isin,
+    )
+
+
+class TestSymbolMapper:
+    def test_register_and_resolve(self):
+        mapper = SymbolMapper()
+        mapper.register(identity())
+        assert mapper.resolve("NSE_EQ|RELIANCE").symbol == "RELIANCE"
+        with pytest.raises(KeyError):
+            mapper.resolve("NSE_EQ|UNKNOWN")
+
+    def test_isin_lookup(self):
+        mapper = SymbolMapper()
+        mapper.register(identity())
+        found = mapper.by_isin("ine002a01018")
+        assert found is not None and found.symbol == "RELIANCE"
+
+    def test_canonical_to_nautilus(self):
+        assert SymbolMapper.canonical_to_nautilus("NSE_EQ|RELIANCE") == "RELIANCE.NSE"
+        assert (
+            SymbolMapper.canonical_to_nautilus("NSE_FO|BANKNIFTY-2026-09-24-CE-52000")
+            == "BANKNIFTY-2026-09-24-CE-52000.NSEFO"
+        )
+
+    def test_upstox_master_load(self, tmp_path):
+        master = tmp_path / "master.csv"
+        master.write_text(
+            "instrument_key,trading_symbol,exchange,segment,isin,instrument_type\n"
+            "NSE_EQ|INE002A01018,RELIANCE,NSE_EQ,EQ,INE002A01018,EQUITY\n"
+        )
+        mapper = SymbolMapper()
+        count = mapper.load_upstox_master(master)
+        assert count == 1
+        key = mapper.upstox_key_for(identity())
+        assert key == "NSE_EQ|INE002A01018"
