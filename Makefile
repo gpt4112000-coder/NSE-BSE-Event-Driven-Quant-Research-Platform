@@ -1,4 +1,4 @@
-.PHONY: setup lint typecheck test mcp mcp-down ingest validate sync backtest pipeline clean
+.PHONY: setup lint typecheck test mcp mcp-down ingest validate sync backtest events pipeline clean
 
 setup:
 	uv venv --allow-existing && uv pip install -e ".[dev]"
@@ -21,6 +21,9 @@ mcp-down:
 ingest:
 	uv run python scripts/ingest.py --symbol $(SYMBOL) --from $(FROM) --to $(TO)
 
+events:
+	uv run python scripts/ingest.py --symbol $(SYMBOL) --from $(FROM) --to $(TO)
+
 validate:
 	uv run python scripts/validate.py --symbol $(SYMBOL)
 
@@ -29,6 +32,9 @@ sync:
 
 backtest:
 	uv run python scripts/backtest.py --symbol $(SYMBOL)
+
+study:
+	uv run python scripts/event_study.py --symbol $(SYMBOL)
 
 pipeline: ingest validate sync backtest
 

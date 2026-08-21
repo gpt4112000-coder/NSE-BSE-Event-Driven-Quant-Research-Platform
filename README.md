@@ -46,11 +46,17 @@ NSE/BSE MCP ──► Ingestion ──► Raw Store (immutable, hashed)
 ```bash
 make setup                 # uv venv + install
 docker compose up -d mcp   # start nse-bse-mcp on :3000
-make ingest SYMBOL=RELIANCE FROM=2024-01-01 TO=2025-01-01
+make ingest SYMBOL=RELIANCE FROM=2025-01-01 TO=2026-08-20
 make validate SYMBOL=RELIANCE
 make sync SYMBOL=RELIANCE
 make backtest SYMBOL=RELIANCE
 ```
+
+**Verified against live NSE data (Aug 2026):** bars come from the NSE archives
+CDN (UDiFF bhavcopy — the quote APIs are bot-blocked), corporate actions and
+announcements via MCP. Real run: 404 validated RELIANCE daily bars,
+2 corporate actions, 81 announcements, 327-fill SMA backtest, event study over
+73 in-sample announcement events.
 
 ## Tests
 

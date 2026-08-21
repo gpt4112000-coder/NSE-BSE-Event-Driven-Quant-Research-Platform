@@ -79,6 +79,8 @@ class NseBseMcpClient:
                 if session:
                     self._session_id = session
                 resp.raise_for_status()
+                if not resp.text.strip():
+                    return {}
                 body = self._parse_response_body(resp.text)
                 if "error" in body:
                     raise McpError(f"MCP error: {body['error']}")

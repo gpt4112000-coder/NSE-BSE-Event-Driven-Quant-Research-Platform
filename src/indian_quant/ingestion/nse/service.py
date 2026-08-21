@@ -149,6 +149,7 @@ class NseIngestionService:
             if action_type is None:
                 continue
             inst_id = make_instrument_id(Exchange.NSE, Segment.EQ, str(sym).upper())
+            subject_text = _first(rec, ["subject", "desc", "purpose"])
             actions.append(
                 CorporateAction(
                     instrument_id=inst_id,
@@ -157,7 +158,8 @@ class NseIngestionService:
                     announcement_date=parse_date(_first(rec, ["date", "DATE", "exDate", "dt"])),
                     record_date=parse_date(_first(rec, ["recordDate", "recDate"])),
                     ex_date=parse_date(_first(rec, ["exDate", "exDt"])),
-                    amount=parse_float(_first(rec, ["rate", "amount", "dividend", "divRate"])),
+                    amount=parse_float(_first(rec, ["rate", "amount", "dividend", "divRate"]))
+                    or dividend_amount_from_subject(str(subject_text) if subject_text else None),
                     ratio=_parse_ratio(_first(rec, ["bv", "bonus", "ratio"])),
                     old_value=parse_float(_first(rec, ["fvFrom", "oldFv", "from"])),
                     new_value=parse_float(_first(rec, ["fvTo", "newFv", "to"])),
@@ -190,7 +192,9 @@ class NseIngestionService:
         announcements: list[Announcement] = []
         for i, rec in enumerate(extract_record_list(payload)):
             sym = rec.get("symbol") or rec.get("SYMBOL") or symbol or "UNKNOWN"
-            published = parse_timestamp(_first(rec, ["sortDate", "publishedAt", "date"]))
+            published = parse_timestamp(
+                _first(rec, ["sort_date", "sortDate", "an_dt", "exchdisstime", "date", "publishedAt"])
+            )
             if published is None:
                 continue
             announcements.append(
@@ -252,6 +256,34 @@ def _classify_action(rec: dict[str, Any]) -> CorporateActionType | None:
     return None
 
 
+_DIVIDEND_PATTERNS = ("rs ", "rs.", "₹")
+
+
+def dividend_amount_from_subject(subject: str | None) -> float | None:
+    """NSE states dividends as 'Dividend - Rs 6 Per Share'; extract the amount."""
+    if not subject:
+        return None
+    low = subject.lower()
+    if "dividend" not in low:
+        return None
+    for pat in _DIVIDEND_PATTERNS:
+        idx = low.find(pat)
+        if idx == -1:
+            continue
+        tail = subject[idx + len(pat):]
+        digits = ""
+        for ch in tail.strip():
+            if ch.isdigit() or ch == ".":
+                digits += ch
+            elif digits:
+                break
+        try:
+            return float(digits) if digits else None
+        except ValueError:
+            return None
+    return None
+
+
 def _parse_ratio(value: Any) -> float | None:
     if value is None:
         return None
@@ -272,6 +304,7 @@ _KNOWN_ACTION_KEYS = {
     "url", "lastUpdatedOn", "ts",
 }
 _KNOWN_ANNOUNCEMENT_KEYS = {
-    "symbol", "SYMBOL", "sortDate", "publishedAt", "date", "desc", "attchmntText",
-    "attchmntFile", "fileUrl", "subject", "smIsin", "smIndustry", "smSymbol",
+    "symbol", "SYMBOL", "sortDate", "sort_date", "an_dt", "publishedAt", "date", "dt",
+    "desc", "attchmntText", "attchmntFile", "fileUrl", "subject", "smIsin", "sm_isin",
+    "smIndustry", "sm_name", "seq_id", "exchdisstime", "bflag", "csvName",
 }

@@ -15,7 +15,8 @@ from typing import Any
 
 CANDIDATE_TS_FIELDS = [
     "timestamp", "TIMESTAMP", "tradeDate", "trade_date", "date", "DATE",
-    "lastUpdateTime", "sortDate", "publishedAt",
+    "lastUpdateTime", "sortDate", "sort_date", "an_dt", "publishedAt",
+    "TradDt",
 ]
 CANDIDATE_OHLC = {
     "open": ["open", "OPEN", "openPrice"],
