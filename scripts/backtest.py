@@ -38,11 +38,26 @@ def main() -> int:
     )
     metrics = summarize_result(result)
 
+    run_dir = settings.data_root / "normalized" / "backtests" / result.run_id
+    run_dir.mkdir(parents=True, exist_ok=True)
+    fills_out = result.fills.reset_index(drop=True) if not result.fills.empty else result.fills
+    fills_out.to_parquet(run_dir / "fills.parquet", index=False)
+    if not result.positions.empty:
+        result.positions.reset_index(drop=True).to_parquet(run_dir / "positions.parquet", index=False)
+
     metadata = MetadataStore(settings.storage.metadata_dsn)
     tracker = ExperimentTracker(metadata)
     tracker.record(kind="backtest_sma", config=result.config, metrics=metrics)
 
     print(json.dumps(metrics, indent=2, default=str))
+
+    import subprocess
+
+    subprocess.run(
+        [sys.executable, str(Path(__file__).parent / "friction_report.py"),
+         "--run-id", result.run_id],
+        check=False,
+    )
     return 0
 
 

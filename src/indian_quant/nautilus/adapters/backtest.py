@@ -16,6 +16,7 @@ from nautilus_trader.model.identifiers import Venue
 from nautilus_trader.model.objects import Money
 
 from indian_quant.config.settings import Settings
+from indian_quant.nautilus.adapters.fees import IndiaDeliveryFeeModel
 from indian_quant.nautilus.data.catalog import CatalogBridge
 from indian_quant.strategies.sma_cross import SmaCross, SmaCrossConfig
 
@@ -75,6 +76,13 @@ class BacktestRunner:
 
         engine = BacktestEngine()
         fill_model = FillModel(prob_fill_on_limit=1.0)
+        bt = self.settings.backtest
+        fee_model = IndiaDeliveryFeeModel(
+            brokerage_bps=bt.brokerage_bps,
+            stt_sell_bps=bt.stt_sell_bps,
+            stamp_buy_bps=bt.stamp_buy_bps,
+            flat_fee_per_order=bt.flat_fee_per_order,
+        )
         engine.add_venue(
             venue=Venue(venue_str),
             oms_type=OmsType.NETTING,
@@ -82,6 +90,7 @@ class BacktestRunner:
             starting_balances=[Money(round(self.settings.backtest.starting_balance_inr), INR)],
             bar_execution=True,
             fill_model=fill_model,
+            fee_model=fee_model,
         )
         engine.add_instrument(instrument)
         engine.add_data(bars)
@@ -99,6 +108,10 @@ class BacktestRunner:
             "slow": slow,
             "trade_size": trade_size,
             "starting_balance": self.settings.backtest.starting_balance_inr,
+            "brokerage_bps": bt.brokerage_bps,
+            "stt_sell_bps": bt.stt_sell_bps,
+            "stamp_buy_bps": bt.stamp_buy_bps,
+            "flat_fee_per_order": bt.flat_fee_per_order,
         }
         config_hash = hashlib.sha256(json.dumps(run_config, sort_keys=True).encode()).hexdigest()[:16]
         result = BacktestResult(
@@ -121,15 +134,36 @@ def _money_to_float(value: object) -> float:
         return float("nan")
 
 
+def _commissions_total(column: object) -> float:
+    """Sum commission amounts from cells like '[13.45 INR]' or '[1.2 INR, 3.4 INR]'."""
+    import re
+
+    total = 0.0
+    for cell in column:  # type: ignore[attr-defined]
+        matches = re.findall(r"[\d.]+", str(cell))
+        for m in matches:
+            try:
+                total += float(m)
+            except ValueError:
+                continue
+    return total
+
+
 def summarize_result(result: BacktestResult) -> dict:
     metrics: dict[str, float | int | str] = {
         "run_id": result.run_id,
         "instrument_id": result.instrument_id,
         "n_fills": result.n_fills,
     }
+    commissions = 0.0
+    if not result.fills.empty and "commissions" in result.fills.columns:
+        commissions = _commissions_total(result.fills["commissions"])
+        metrics["total_commissions"] = round(commissions, 2)
     if not result.positions.empty and "realized_pnl" in result.positions.columns:
         pnl = result.positions["realized_pnl"].map(_money_to_float).dropna()
-        metrics["realized_pnl"] = float(pnl.sum())
+        net = float(pnl.sum())
+        metrics["net_pnl"] = round(net, 2)
+        metrics["gross_pnl"] = round(net + commissions, 2)
         metrics["n_closed_positions"] = int(len(result.positions))
     if not result.account.empty:
         for col in ("total", "free"):

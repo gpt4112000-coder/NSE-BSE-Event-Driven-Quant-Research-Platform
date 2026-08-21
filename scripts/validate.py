@@ -22,6 +22,7 @@ import pandas as pd
 import pyarrow.parquet as pq
 
 from indian_quant.config import load_settings
+from indian_quant.instruments import default_calendar
 from indian_quant.normalization import apply_corporate_action_adjustment
 from indian_quant.quality import run_quality_suite
 from indian_quant.schemas import CorporateAction, CorporateActionType, MarketBar, Timeframe
@@ -99,18 +100,20 @@ def main() -> int:
     bars = load_bars(df)
 
     adjusted_note = "unadjusted"
+    actions = [] if args.no_adjust else load_actions(store, symbol)
     if not args.no_adjust:
-        actions = load_actions(store, symbol)
         applicable = [a for a in actions if a.action_type in (CorporateActionType.SPLIT,
                                                               CorporateActionType.BONUS)]
         if applicable:
             bars = apply_corporate_action_adjustment(bars, applicable)
             adjusted_note = f"adjusted by {len(applicable)} split/bonus action(s)"
-        else:
+        elif actions:
             adjusted_note = f"{len(actions)} action(s) on record, none price-affecting"
 
     report, unique = run_quality_suite(
         bars, dataset=f"{args.exchange}:{symbol}",
+        calendar=default_calendar(),
+        actions=actions or None,
         max_gap_days=settings.quality.max_gap_days,
     )
     metadata = MetadataStore(settings.storage.metadata_dsn)

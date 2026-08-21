@@ -58,6 +58,10 @@ class BacktestConfig(BaseModel):
     catalog_path: Path = Path("data/catalog")
     fill_prob: float = 1.0
     slippage_ticks: int = 0
+    brokerage_bps: float = 3.0
+    stt_sell_bps: float = 100.0
+    stamp_buy_bps: float = 1.5
+    flat_fee_per_order: float = 0.0
 
 
 class Settings(BaseModel):

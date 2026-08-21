@@ -23,6 +23,7 @@ import pandas as pd
 
 from indian_quant.config import load_settings
 from indian_quant.ingestion import BhavcopyIngester, NseBseMcpClient, NseIngestionService
+from indian_quant.instruments import default_calendar
 from indian_quant.normalization import deduplicate_bars
 from indian_quant.schemas import MarketBar, Timeframe
 from indian_quant.storage import MetadataStore, ParquetStore, RawStore
@@ -62,7 +63,25 @@ def main() -> int:
     print(f"ingesting {symbol} bars [{args.from_date} .. {args.to_date}] via {args.source}")
     if args.source == "bhavcopy":
         ingester = BhavcopyIngester(raw)
+        calendar = default_calendar()
+        skipped = {"holidays": 0}
+
+        def _is_trading(d: date) -> bool:
+            if not calendar.is_trading_day(d):
+                skipped["holidays"] += 1
+                return False
+            return True
+
+        original_fetch = ingester.fetch_cm_zip
+
+        def fetch_if_trading(day: date):
+            if not _is_trading(day):
+                return None, "calendar:holiday"
+            return original_fetch(day)
+
+        ingester.fetch_cm_zip = fetch_if_trading  # type: ignore[method-assign]
         bars = ingester.ingest_range(from_d, to_d, symbols={symbol})
+        print(f"calendar skipped {skipped['holidays']} non-trading days")
     else:
         client = NseBseMcpClient(
             settings.mcp.base_url,

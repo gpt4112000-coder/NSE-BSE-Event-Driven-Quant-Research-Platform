@@ -3,6 +3,7 @@
 from indian_quant.quality.validators import (
     QualityIssue,
     QualityReport,
+    detect_adjustment_discontinuities,
     detect_duplicates,
     detect_missing_sessions,
     detect_price_anomalies,
@@ -13,6 +14,7 @@ from indian_quant.quality.validators import (
 __all__ = [
     "QualityIssue",
     "QualityReport",
+    "detect_adjustment_discontinuities",
     "detect_duplicates",
     "detect_missing_sessions",
     "detect_price_anomalies",

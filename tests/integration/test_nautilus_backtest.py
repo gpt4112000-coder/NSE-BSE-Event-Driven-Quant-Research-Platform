@@ -76,7 +76,10 @@ class TestNautilusBacktest:
     def test_summary_metrics(self, backtest_result):
         metrics = summarize_result(backtest_result)
         assert metrics["n_fills"] == backtest_result.n_fills
-        assert "realized_pnl" in metrics
+        assert "gross_pnl" in metrics
+        assert "net_pnl" in metrics
+        assert "total_commissions" in metrics
+        assert float(metrics["net_pnl"]) <= float(metrics["gross_pnl"])
 
     def test_account_in_inr(self, backtest_result):
         assert not backtest_result.account.empty

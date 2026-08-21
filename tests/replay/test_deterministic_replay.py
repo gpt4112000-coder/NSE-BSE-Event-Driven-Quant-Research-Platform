@@ -79,8 +79,8 @@ class TestDeterministicReplay:
         pd.testing.assert_frame_equal(f1, f2)
 
         m1, m2 = summarize_result(r1), summarize_result(r2)
-        assert m1["realized_pnl"] == m2["realized_pnl"]
-        assert m1["n_closed_positions"] == m2["n_closed_positions"]
+        for key in ("gross_pnl", "net_pnl", "total_commissions", "n_closed_positions"):
+            assert m1[key] == m2[key], key
 
     def test_config_change_changes_outcome_or_not_but_is_recorded(self, catalog_settings):
         runner = BacktestRunner(catalog_settings)

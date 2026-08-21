@@ -30,6 +30,13 @@ class ResearchDB:
                     f"SELECT * FROM read_parquet('{root}/bars_*/**/*.parquet', "
                     f"filename=true, hive_partitioning=false)"
                 )
+        backtests = normalized / "backtests"
+        if backtests.exists():
+            self._con.execute(
+                f"CREATE VIEW IF NOT EXISTS backtest_fills AS "
+                f"SELECT * FROM read_parquet('{backtests}/*/fills.parquet', "
+                f"filename=true)"
+            )
 
     def query(self, sql: str, params: list | None = None) -> pd.DataFrame:
         return self._con.execute(sql, params or []).fetchdf()
