@@ -30,6 +30,12 @@ class ResearchDB:
                     f"SELECT * FROM read_parquet('{root}/bars_*/**/*.parquet', "
                     f"filename=true, hive_partitioning=false)"
                 )
+        delivery = validated / "delivery"
+        if delivery.exists():
+            self._con.execute(
+                f"CREATE VIEW IF NOT EXISTS delivery AS "
+                f"SELECT * FROM read_parquet('{delivery}/**/*.parquet', filename=true)"
+            )
         backtests = normalized / "backtests"
         if backtests.exists():
             self._con.execute(

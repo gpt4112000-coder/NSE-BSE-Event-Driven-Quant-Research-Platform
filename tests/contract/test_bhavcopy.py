@@ -39,6 +39,35 @@ class TestBhavcopyParsing:
         only_eq = ingester.parse_cm_zip(payload, date(2026, 8, 18), series={"EQ"})
         assert len(all_eq) >= len(only_eq) > 100
 
+    def test_sme_series_maps_to_sme_segment(self, tmp_path_factory):
+        """SM/ST series must land on NSE_SME| ids - never mixed with EQ."""
+        import io
+        import zipfile
+
+        from indian_quant.storage import RawStore as _RS
+
+        header = (
+            "TradDt,BizDt,Sgmt,Src,FinInstrmTp,FinInstrmId,ISIN,TckrSymb,SctySrs,"
+            "OpnPric,HghPric,LwPric,ClsPric,TtlTradgVol\n"
+        )
+        rows = (
+            "2026-08-18,2026-08-18,CM,NSE,STK,99999,INE11111111,QMSMEDI,SM,"
+            "100.0,105.0,99.0,104.0,50000\n"
+            "2026-08-18,2026-08-18,CM,NSE,STK,99998,INE22222222,SMESTK,ST,"
+            "50.0,52.0,49.5,51.0,20000\n"
+            "2026-08-18,2026-08-18,CM,NSE,STK,500325,INE002A01018,RELIANCE,EQ,"
+            "1314.0,1328.6,1311.2,1322.0,10180567\n"
+        )
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, "w") as zf:
+            zf.writestr("test.csv", header + rows)
+        ing = BhavcopyIngester(_RS(tmp_path_factory.mktemp("raw2")))
+        bars = ing.parse_cm_zip(buf.getvalue(), date(2026, 8, 18))
+        ids = {b.instrument_id for b in bars}
+        assert "NSE_SME|QMSMEDI" in ids
+        assert "NSE_SME|SMESTK" in ids
+        assert "NSE_EQ|RELIANCE" in ids
+
     def test_symbol_filter(self, ingester):
         payload = FIXTURE.read_bytes()
         bars = ingester.parse_cm_zip(payload, date(2026, 8, 18), symbols={"TCS", "INFY"})
@@ -57,3 +86,4 @@ def test_delivery_csv_parsing():
     out = parse_delivery_csv(text)
     assert out["RELIANCE"]["close"] == pytest.approx(1322.0)
     assert out["RELIANCE"]["deliv_pct"] == pytest.approx(59.06)
+    assert out["RELIANCE"]["series"] == "EQ"

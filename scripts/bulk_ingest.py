@@ -1,0 +1,267 @@
+"""Bulk per-date universe ingestion: one exchange-wide download covers all symbols.
+
+For every trading day in the window:
+    1. ensure CM bhavcopy zip   (reuse cached raw zip when present)
+    2. ensure delivery CSV
+    3. parse BOTH into in-memory buffers, flushed once at the end:
+         - bars      -> normalized/bars_1d/NSE/{SYM}.parquet   (EQ + SME segments)
+         - delivery  -> normalized/delivery/NSE/{SYM}.parquet
+Resumable via two layers:
+    - download cache  = RawStore content-addressed payloads (idempotent)
+    - parse manifest  = data/normalized/_manifests.json (dates fully parsed)
+
+Usage:
+    python scripts/bulk_ingest.py --from 2024-09-01 --to 2026-08-22 [--delivery-only]
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import sys
+import time
+from datetime import UTC, date, datetime
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
+
+import pandas as pd
+
+from indian_quant.config import load_settings
+from indian_quant.ingestion.nse import BhavcopyIngester, parse_delivery_csv
+from indian_quant.instruments import default_calendar
+from indian_quant.schemas import Timeframe
+from indian_quant.storage import MetadataStore, ParquetStore, RawStore
+
+MANIFEST_FILE = "_manifests.json"
+
+
+def load_manifest(settings) -> dict[str, set[str]]:
+    path = settings.normalized_dir / MANIFEST_FILE
+    if not path.exists():
+        return {}
+    try:
+        data = json.loads(path.read_text())
+        return {tool: set(dates) for tool, dates in data.items()}
+    except (OSError, ValueError):
+        return {}
+
+
+def save_manifest(settings, manifest: dict[str, set[str]]) -> None:
+    settings.normalized_dir.mkdir(parents=True, exist_ok=True)
+    path = settings.normalized_dir / MANIFEST_FILE
+    path.write_text(json.dumps({k: sorted(v) for k, v in manifest.items()}, indent=1))
+
+
+def index_raw_by_date(raw_root: Path, source: str, tool: str) -> dict[str, Path]:
+    """Map request.date -> payload path from raw-store meta sidecars."""
+    out: dict[str, Path] = {}
+    meta_dir = raw_root / source / tool
+    if not meta_dir.exists():
+        return out
+    ext = "zip" if "udiff" in tool else "csv"
+    for meta in meta_dir.rglob("*.meta.json"):
+        try:
+            payload_meta = json.loads(meta.read_text())
+            day = (payload_meta.get("request") or {}).get("date")
+            if not day:
+                continue
+            payload_path = meta.with_name(meta.name.replace(".meta.json", f".{ext}"))
+            if payload_path.exists():
+                out.setdefault(day, payload_path)
+        except (OSError, ValueError):
+            continue
+    return out
+
+
+def segment_for_series(series: str) -> str | None:
+    if series in ("SM", "ST"):
+        return "SME"
+    if series in ("EQ", "BE", "BZ"):
+        return "EQ"
+    return None
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description="Bulk universe ingestion")
+    parser.add_argument("--from", dest="from_date", required=True)
+    parser.add_argument("--to", dest="to_date", required=True)
+    parser.add_argument("--delivery-only", action="store_true")
+    parser.add_argument("--bars-only", action="store_true")
+    parser.add_argument("--sleep", type=float, default=0.3)
+    parser.add_argument("--flush-every", type=int, default=60,
+                        help="persist buffers every N parsed days")
+    parser.add_argument("--config", default=None)
+    args = parser.parse_args()
+
+    settings = load_settings(args.config)
+    from_d = date.fromisoformat(args.from_date)
+    to_d = date.fromisoformat(args.to_date)
+    calendar = default_calendar()
+    store = ParquetStore(settings.data_root, settings.storage.parquet_compression)
+    raw_root = settings.data_root / "raw"
+    ingester = BhavcopyIngester(RawStore(raw_root))
+    metadata = MetadataStore(settings.storage.metadata_dsn)
+
+    manifest = load_manifest(settings)
+    cm_index = index_raw_by_date(raw_root, "nse", "bhavcopy_cm_udiff")
+    dl_index = index_raw_by_date(raw_root, "nse", "bhavcopy_delivery_sec")
+
+    do_bars = not args.delivery_only
+    do_delivery = not args.bars_only
+    trading_days = calendar.trading_days_between(from_d, to_d)
+
+    pending_cm = [
+        d for d in trading_days
+        if do_bars and d.isoformat() not in manifest.get("bars_1d", set())
+    ]
+    pending_dl = [
+        d for d in trading_days
+        if do_delivery and d.isoformat() not in manifest.get("delivery", set())
+    ]
+    print(f"window {from_d}..{to_d}: {len(trading_days)} trading days | "
+          f"to parse: bars {len(pending_cm)}, delivery {len(pending_dl)}")
+
+    bars_buffer: dict[str, list[dict]] = {}
+    delivery_buffer: dict[str, list[dict]] = {}
+    parsed_since_flush = 0
+    t0 = time.time()
+
+    def flush_bars() -> int:
+        written_files = 0
+        for instrument_id, rows in bars_buffer.items():
+            if not rows:
+                continue
+            symbol = instrument_id.split("|")[-1]
+            frame = pd.DataFrame(rows)
+            existing = store._path_for("normalized", "bars_1d", "NSE", symbol)
+            if existing.exists():
+                old = pd.read_parquet(existing)
+                frame = pd.concat([old, frame], ignore_index=True)
+            frame["timestamp"] = pd.to_datetime(frame["timestamp"], utc=True)
+            frame = (
+                frame.sort_values("timestamp")
+                .drop_duplicates(subset=["timestamp"])
+                .reset_index(drop=True)
+            )
+            existing.parent.mkdir(parents=True, exist_ok=True)
+            import pyarrow.parquet as pq
+
+            pq.write_table(
+                store._conform(frame),
+                existing,
+                compression=settings.storage.parquet_compression,
+            )
+            written_files += 1
+        bars_buffer.clear()
+        return written_files
+
+    def flush_delivery() -> int:
+        out_dir = settings.normalized_dir / "delivery" / "NSE"
+        out_dir.mkdir(parents=True, exist_ok=True)
+        written = 0
+        for symbol, rows in delivery_buffer.items():
+            target = out_dir / f"{symbol}.parquet"
+            frame = pd.DataFrame(rows)
+            if target.exists():
+                old = pd.read_parquet(target)
+                frame = pd.concat([old, frame], ignore_index=True)
+            frame = (
+                frame.drop_duplicates(subset=["date"])
+                .sort_values("date")
+                .reset_index(drop=True)
+            )
+            frame.to_parquet(target, index=False)
+            written += 1
+        delivery_buffer.clear()
+        return written
+
+    for i, day in enumerate(trading_days):
+        key = day.isoformat()
+        did_work = False
+
+        if do_bars and day in [d for d in pending_cm]:
+            payload_path = cm_index.get(key)
+            payload = payload_path.read_bytes() if payload_path else None
+            if payload is None:
+                fetched, _ = ingester.fetch_cm_zip(day)
+                payload = fetched
+                time.sleep(args.sleep)
+            if payload:
+                for bar in ingester.parse_cm_zip(payload, day):
+                    sym = bar.instrument_id.split("|")[-1]
+                    bars_buffer.setdefault(bar.instrument_id, []).append({
+                        "instrument_id": bar.instrument_id,
+                        "exchange": "NSE",
+                        "timestamp": bar.timestamp,
+                        "timeframe": Timeframe.DAY.value,
+                        "open": bar.open,
+                        "high": bar.high,
+                        "low": bar.low,
+                        "close": bar.close,
+                        "volume": bar.volume,
+                        "source": "NSE",
+                    })
+                    _ = sym
+                manifest.setdefault("bars_1d", set()).add(key)
+                did_work = True
+            else:
+                manifest.setdefault("bars_1d", set()).add(key)  # holiday/no-file
+
+        if do_delivery and day in [d for d in pending_dl]:
+            text_path = dl_index.get(key)
+            text = text_path.read_text() if text_path else None
+            if text is None:
+                fetched_text, _ = ingester.fetch_delivery_csv(day)
+                text = fetched_text
+                time.sleep(args.sleep)
+            if text:
+                for symbol, rec in parse_delivery_csv(text).items():
+                    segment = segment_for_series(str(rec.get("series", "")))
+                    if segment is None or "close" not in rec:
+                        continue
+                    delivery_buffer.setdefault(symbol, []).append({
+                        "date": key,
+                        "symbol": symbol,
+                        "segment": segment,
+                        "series": str(rec.get("series", "")),
+                        "close": float(rec["close"]),
+                        "deliv_pct": (
+                            float(rec["deliv_pct"]) if rec.get("deliv_pct") is not None
+                            else None
+                        ),
+                    })
+                manifest.setdefault("delivery", set()).add(key)
+                did_work = True
+            else:
+                manifest.setdefault("delivery", set()).add(key)
+
+        if did_work:
+            parsed_since_flush += 1
+
+        if parsed_since_flush >= args.flush_every:
+            n_files_b = flush_bars()
+            n_files_d = flush_delivery()
+            save_manifest(settings, manifest)
+            parsed_since_flush = 0
+            print(f"[{i+1}/{len(trading_days)}] {key} flushed "
+                  f"({n_files_b} bar files, {n_files_d} delivery files, "
+                  f"{time.time()-t0:.0f}s)")
+
+    n_bars_files = flush_bars() if do_bars else 0
+    n_deliv_files = flush_delivery() if do_delivery else 0
+    save_manifest(settings, manifest)
+
+    job_id = f"bulk-{datetime.now(UTC).strftime('%Y%m%d%H%M%S')}"
+    metadata.start_job(job_id, tool="bulk_ingest", source="NSE",
+                       params={"from": args.from_date, "to": args.to_date})
+    metadata.finish_job(job_id, status="OK",
+                        rows=n_bars_files + n_deliv_files)
+    metadata.close()
+    print(f"DONE in {time.time()-t0:.0f}s: wrote {n_bars_files} bar files, "
+          f"{n_deliv_files} delivery files")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

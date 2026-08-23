@@ -34,7 +34,17 @@ from indian_quant.storage.raw_store import RawStore
 CM_URL = "https://nsearchives.nseindia.com/content/cm/BhavCopy_NSE_CM_0_0_0_{yyyymmdd}_F_0000.csv.zip"
 DELIVERY_URL = "https://nsearchives.nseindia.com/products/content/sec_bhavdata_full_{ddmmyyyy}.csv"
 
+# Series -> canonical segment mapping (verified empirically against live
+# UDiFF files, Aug 2026: SM/ST are the NSE Emerge/SME series).
+SERIES_SEGMENT = {
+    "EQ": Segment.EQ,
+    "BE": Segment.EQ,
+    "BZ": Segment.EQ,
+    "SM": Segment.SME,
+    "ST": Segment.SME,
+}
 CASH_SERIES = {"EQ", "BE", "BZ"}
+UNIVERSE_SERIES = {"EQ", "BE", "BZ", "SM", "ST"}
 
 HEADERS = {
     "User-Agent": (
@@ -102,14 +112,16 @@ class BhavcopyIngester:
         series: set[str] | None = None,
     ) -> list[MarketBar]:
         """Parse a CM UDiFF zip into canonical daily bars."""
-        wanted_series = series or CASH_SERIES
+        wanted_series = series or UNIVERSE_SERIES
         with zipfile.ZipFile(io.BytesIO(payload)) as zf:
             name = next(n for n in zf.namelist() if n.endswith(".csv"))
             reader = csv.DictReader(io.StringIO(zf.read(name).decode("utf-8-sig")))
             bars: list[MarketBar] = []
             for row in reader:
-                if row.get("SctySrs") not in wanted_series:
+                scry = row.get("SctySrs")
+                if scry not in wanted_series:
                     continue
+                segment = SERIES_SEGMENT.get(scry, Segment.EQ)
                 symbol = (row.get("TckrSymb") or "").strip()
                 if not symbol or (symbols and symbol.upper() not in symbols):
                     continue
@@ -124,7 +136,7 @@ class BhavcopyIngester:
                 ts = datetime.fromisoformat(str(row.get("TradDt") or day.isoformat())).replace(tzinfo=UTC)
                 bars.append(
                     MarketBar(
-                        instrument_id=make_instrument_id(Exchange.NSE, Segment.EQ, symbol.upper()),
+                        instrument_id=make_instrument_id(Exchange.NSE, segment, symbol.upper()),
                         exchange="NSE",
                         timestamp=ts,
                         timeframe=Timeframe.DAY,
@@ -163,7 +175,7 @@ class BhavcopyIngester:
         return all_bars
 
 
-def parse_delivery_csv(text: str) -> dict[str, dict[str, float]]:
+def parse_delivery_csv(text: str) -> dict[str, dict[str, Any]]:
     """Parse sec_bhavdata_full delivery CSV.
 
     Returns {symbol: {"close": float, "deliv_pct": float|None}}.
@@ -176,7 +188,7 @@ def parse_delivery_csv(text: str) -> dict[str, dict[str, float]]:
         series = cleaned.get("SERIES", "")
         if not symbol or series not in ("EQ", "BE", "BZ"):
             continue
-        rec: dict[str, float] = {}
+        rec: dict[str, Any] = {"series": cleaned.get("SERIES", "")}
         try:
             rec["close"] = float(cleaned.get("CLOSE_PRICE", ""))
         except ValueError:
