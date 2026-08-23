@@ -1,4 +1,4 @@
-.PHONY: setup lint typecheck test mcp mcp-down ingest validate sync backtest events crosscheck pipeline clean
+.PHONY: setup lint typecheck test mcp mcp-down ingest validate sync backtest events crosscheck status pipeline clean
 
 setup:
 	uv venv --allow-existing && uv pip install -e ".[dev]"
@@ -38,6 +38,9 @@ study:
 
 crosscheck:
 	uv run python scripts/crosscheck.py --symbol $(SYMBOL)
+
+status:
+	uv run python scripts/status_report.py
 
 pipeline: ingest validate sync backtest
 

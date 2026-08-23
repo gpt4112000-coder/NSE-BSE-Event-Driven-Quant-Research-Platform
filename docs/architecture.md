@@ -66,12 +66,18 @@ to RawStore *before* parsing, and every parsed contract carries lineage
 Upstream field naming varies; parsing accepts explicit alias lists only and
 routes unknown keys into `extra` so nothing silently mixes.
 
-### 4. Normalization & quality
+### 4. Normalization, quality & calendar
 
-Deduplication, corporate-action back-adjustment (splits/bonuses by ex-date),
-resampling, IST→UTC normalization. The quality engine validates OHLC
-consistency, detects duplicates/conflicts, >35% price jumps and unexplained
-missing sessions (holiday-aware), producing reports stored in metadata.
+NSE trading calendar (empirically seeded 2024–27) drives gap detection and
+ingest skipping. The quality engine validates OHLC consistency, detects
+duplicates/conflicts, >35% price jumps, unexplained missing sessions and
+split/bonus adjustment discontinuities, producing reports stored in metadata.
+Crosscheck (`scripts/crosscheck.py`) verifies closes across independent
+sources with a warning>0.1% / error>0.5% policy.
+
+Cost realism: an India-specific side-aware fee model (brokerage/STT/stamp)
+binds into the Nautilus venue so every backtest reports gross *and* net PnL;
+friction analytics quantify exactly how much alpha costs consume.
 
 ### 5. Nautilus integration (`src/indian_quant/nautilus/`)
 
@@ -90,11 +96,18 @@ and event studies (announcement timestamps → abnormal returns over
 [-pre,+post] windows → CAR distribution → t-stat/p-value). Every experiment is
 registered in the metadata store with config hash + dataset hash.
 
-### 7. Adapters (`src/indian_quant/adapters/upstox/`)
+### 7. Adapters & platform services
 
-REST historical V3 works today (candles → canonical bars, raw-persisted).
-WebSocket feed V3 and sandbox execution are scaffolded behind stable
-interfaces — see `adapter.md`.
+| Component | Status |
+|---|---|
+| Upstox REST Historical V3 | live-verified: 30d RELIANCE, 0.0000% drift vs NSE bhavcopy |
+| Feed V3 protobuf decoder | implemented on the official schema; fixture-tested; session recording at next open |
+| Sandbox execution client | place/modify/cancel proven live on api-sandbox.upstox.com |
+| Reconciler (C1) | local-vs-broker diff, halt-on-mismatch; read-path verified live |
+| Risk config (C2) | Nautilus RiskEngine rates + notional caps wired into every run |
+| Metrics + JSON logs (C3) | Prometheus exporter over metadata store |
+
+See `adapter.md` for endpoint specifics and sandbox token steps.
 
 ## What we deliberately do NOT do
 

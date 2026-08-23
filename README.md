@@ -52,11 +52,21 @@ make sync SYMBOL=RELIANCE
 make backtest SYMBOL=RELIANCE
 ```
 
-**Verified against live NSE data (Aug 2026):** bars come from the NSE archives
-CDN (UDiFF bhavcopy — the quote APIs are bot-blocked), corporate actions and
-announcements via MCP. Real run: 404 validated RELIANCE daily bars,
-2 corporate actions, 81 announcements, 327-fill SMA backtest, event study over
-73 in-sample announcement events.
+## Live verification evidence (Aug 2026)
+
+| Proof | Result |
+|---|---|
+| Real RELIANCE history | 404 daily bars from NSE UDiFF bhavcopy CDN · Jan 2025 → Aug 2026 |
+| Corporate events | 2 actions + 81 announcements ingested via MCP with lineage |
+| Upstox REST V3 vs exchange closes | **30 days · drift 0.0000% · PASS** |
+| NSE CM vs delivery file | 24 days · drift 0.0000% · PASS |
+| Sandbox order lifecycle | place → modify → cancelled (order 260823192859042) |
+| Broker reconciliation | orders/positions/funds IO live-verified · zero mismatches |
+| Honest friction finding | ₹252,699 commissions turned a flat SMA strategy into −₹259,859 net |
+
+Dashboards: `dashboards/status.html` (platform status + PnL curve),
+`dashboards/friction_*.html` (alpha-leakage profile). Regenerate with
+`make status` / `make backtest`.
 
 ## Tests
 

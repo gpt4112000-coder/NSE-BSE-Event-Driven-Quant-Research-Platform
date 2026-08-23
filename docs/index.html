@@ -186,7 +186,7 @@ footer a{color:var(--dim)} footer a:hover{color:var(--txt)}
 </nav>
 
 <header class="wrap">
-  <span class="kicker">&#9679; NSE · BSE · NAUTILUSTRADER · UPSTOX</span>
+  <span class="kicker">&#9679; NSE · BSE · NAUTILUSTRADER · UPSTOX · SANDBOX-LIVE</span>
   <h1>Event-driven quant research,<br><span class="grad">built on trustworthy data.</span></h1>
   <p class="sub">An Indian-market research &amp; market infrastructure layer: exchange data acquisition through MCP,
   strict canonical contracts, a quality engine, and NautilusTrader backtesting — with Upstox connectivity scaffolded behind stable adapter boundaries.</p>
@@ -207,6 +207,21 @@ footer a{color:var(--dim)} footer a:hover{color:var(--txt)}
     <b>Nautilus</b> tells us how a strategy would have behaved. <b>Upstox</b> tells us how the
     system behaves against a broker interface.
   </div>
+</section>
+
+<section id="verified" class="wrap reveal">
+  <span class="sec-tag">// live-verified</span>
+  <h2>Proof, not promises</h2>
+  <p class="lead">Every claim below was executed against real systems - exchange archives, broker APIs, sandbox order matching.</p>
+  <table style="width:100%;max-width:1020px;border-collapse:collapse;margin-top:24px;font-size:13px">
+    <tr style="color:#4a5d80;text-transform:uppercase;font-size:10px;letter-spacing:1px"><td style="padding:8px 10px;border-bottom:1px solid #1c2a42">proof</td><td style="padding:8px 10px;border-bottom:1px solid #1c2a42">evidence</td></tr>
+    <tr><td style="padding:8px 10px;border-bottom:1px solid var(--line)">404 real RELIANCE daily bars ingested</td><td style="padding:8px 10px;border-bottom:1px solid var(--line);color:#00e5a0">NSE UDiFF bhavcopies · Jan 2025 → Aug 2026</td></tr>
+    <tr><td style="padding:8px 10px;border-bottom:1px solid var(--line)">81 announcements + 2 corporate actions mapped</td><td style="padding:8px 10px;border-bottom:1px solid var(--line);color:#00e5a0">live MCP · lineage-hashed</td></tr>
+    <tr><td style="padding:8px 10px;border-bottom:1px solid var(--line)">Upstox REST vs exchange closes</td><td style="padding:8px 10px;border-bottom:1px solid var(--line);color:#00e5a0">30 days · drift 0.0000%</td></tr>
+    <tr><td style="padding:8px 10px;border-bottom:1px solid var(--line)">Sandbox order lifecycle</td><td style="padding:8px 10px;border-bottom:1px solid var(--line);color:#00e5a0">place → modify → cancelled · order 2608…9042</td></tr>
+    <tr><td style="padding:8px 10px;border-bottom:1px solid var(--line)">Broker reconciliation read-path</td><td style="padding:8px 10px;border-bottom:1px solid var(--line);color:#00e5a0">orders / positions / funds IO ok</td></tr>
+    <tr><td style="padding:8px 10px">Honest friction finding</td><td style="padding:8px 10px;color:#ffb454">₹2.5 lakh commissions flipped a flat strategy to −₹2.6 lakh net</td></tr>
+  </table>
 </section>
 
 <section id="architecture" class="wrap reveal">
@@ -332,9 +347,9 @@ footer a{color:var(--dim)} footer a:hover{color:var(--txt)}
     <div class="phase"><h4>Phase 3 · Normalization + quality <span class="badge done">DONE</span></h4><p>Symbol/ISIN mapping, dedupe, corporate-action adjustment, gap detection, reports.</p></div>
     <div class="phase"><h4>Phase 4 · Nautilus historical integration <span class="badge done">DONE</span></h4><p>Validated parquet &#8594; catalog &#8594; BacktestEngine &#8594; fills/positions/account reports.</p></div>
     <div class="phase"><h4>Phase 5 · Quant research engine <span class="badge done">DONE</span></h4><p>Momentum, volatility, volume/delivery anomalies, regimes, event studies with significance tests.</p></div>
-    <div class="phase"><h4>Phase 6 · Upstox market-data adapter <span class="badge part">SCAFFOLD</span></h4><p>Feed client + decoder interface ready; wire protobuf classes, replay vs stream parity test remains.</p></div>
-    <div class="phase"><h4>Phase 7 · Sandbox execution <span class="badge part">INTERFACE</span></h4><p>ExecutionClient boundary mirrors Nautilus semantics; live construction physically refused.</p></div>
-    <div class="phase todo"><h4>Phase 8 · Production engineering <span class="badge part" style="color:var(--faint);border-color:var(--line);background:transparent">NEXT</span></h4><p>Observability, fault injection, rate-limit handling, deterministic-replay certification.</p></div>
+    <div class="phase"><h4>Phase 6 · Upstox market-data adapter <span class="badge done">LIVE</span></h4><p>REST V3 verified against exchange ground truth (30 days, 0.0000% drift). Protobuf decoder built on the official schema, fixture-tested; tick-session recording runs at next market open.</p></div>
+    <div class="phase"><h4>Phase 7 · Sandbox execution <span class="badge done">LIVE</span></h4><p>place → modify → cancel proven against api-sandbox.upstox.com (order 260823192859042); reconciliation reads verified against the live account.</p></div>
+    <div class="phase todo"><h4>Phase 8 · Production engineering <span class="badge part" style="color:var(--faint);border-color:var(--line);background:transparent">SHIPPING</span></h4><p>Risk limits enforced by the engine, reconciliation halt-policy, Prometheus metrics exporter and JSON logging already merged. Remaining: recorded tick-session parity (B4) and fault-injection drills.</p></div>
   </div>
 </section>
 
@@ -358,8 +373,8 @@ footer a{color:var(--dim)} footer a:hover{color:var(--txt)}
   </div>
 
   <div class="stats">
-    <div class="stat"><div class="n" data-count="78">0</div><div class="l">tests passing</div></div>
-    <div class="stat"><div class="n" data-count="48">0</div><div class="l">modules type-checked</div></div>
+    <div class="stat"><div class="n" data-count="153">0</div><div class="l">tests passing</div></div>
+    <div class="stat"><div class="n" data-count="57">0</div><div class="l">modules type-checked</div></div>
     <div class="stat"><div class="n" data-count="60">0</div><div class="l">MCP tools available</div></div>
     <div class="stat"><div class="n" data-count="8">0</div><div class="l">phases planned</div></div>
     <div class="stat"><div class="n" data-count="100" data-suffix="%">0</div><div class="l">ruff + mypy clean</div></div>
