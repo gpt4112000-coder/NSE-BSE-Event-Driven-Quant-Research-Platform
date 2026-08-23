@@ -47,7 +47,8 @@ class TestLifecycle:
         if path.endswith("/modify"):
             return httpx.Response(200, json={"data": {
                 "order_id": "O1", "status": "modified"}})
-        if "/cancel/" in path:
+        if "/cancel" in path and request.method == "DELETE":
+            assert request.url.params.get("order_id")
             return httpx.Response(200, json={"data": {
                 "order_id": "O1", "status": "cancelled"}})
         return httpx.Response(200, json={})
@@ -98,30 +99,16 @@ class TestLifecycle:
                 instrument_key="BAD", quantity=1, side=OrderSide.BUY))
 
 
-class TestReconcilePull:
-    async def test_order_book_and_positions(self, tmp_path, monkeypatch):
-        monkeypatch.setenv("UPSTOX_SANDBOX_TOKEN", "SBX")
+class TestSandboxReadGuard:
+    def test_reads_raise_orders_only_error(self):
+        import asyncio
 
-        def handler(request: httpx.Request) -> httpx.Response:
-            if request.url.path == "/v2/order/retrieve-all":
-                return httpx.Response(200, json={"data": [{
-                    "order_id": "O1", "status": "complete",
-                    "filled_quantity": 100, "average_price": 1321.5}]})
-            if "positions" in request.url.path:
-                return httpx.Response(200, json={"data": [{
-                    "instrument_key": "NSE_EQ|INE002A01018", "quantity": 100}]})
-            if request.url.path.endswith("/get-funds-and-margin"):
-                return httpx.Response(200, json={"data": {"equity": {
-                    "available_margin": 500000.0}}})
-            return httpx.Response(200, json={})
-
-        client = make_client(handler)
-        book = client.order_book()
-        pos = client.positions()
-        funds = client.funds()
-        assert book[0]["order_id"] == "O1"
-        assert pos[0]["quantity"] == 100
-        assert funds["available_margin"] == 500000.0
-
-        reports = await client.reconcile()
-        assert reports and reports[0].status == "complete"
+        client = make_client(lambda r: httpx.Response(200))
+        with pytest.raises(RuntimeError, match="unavailable with sandbox tokens"):
+            client.order_book()
+        with pytest.raises(RuntimeError, match="unavailable with sandbox tokens"):
+            client.positions()
+        with pytest.raises(RuntimeError, match="unavailable with sandbox tokens"):
+            client.funds()
+        with pytest.raises(RuntimeError, match="unavailable with sandbox tokens"):
+            asyncio.run(client.reconcile())
