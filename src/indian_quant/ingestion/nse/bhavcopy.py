@@ -186,7 +186,7 @@ def parse_delivery_csv(text: str) -> dict[str, dict[str, Any]]:
         cleaned = {(k or "").strip(): (v or "").strip() for k, v in row.items()}
         symbol = cleaned.get("SYMBOL", "")
         series = cleaned.get("SERIES", "")
-        if not symbol or series not in ("EQ", "BE", "BZ"):
+        if not symbol or series not in UNIVERSE_SERIES:
             continue
         rec: dict[str, Any] = {"series": cleaned.get("SERIES", "")}
         try:
