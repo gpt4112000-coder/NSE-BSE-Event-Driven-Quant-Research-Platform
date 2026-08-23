@@ -208,6 +208,67 @@ def detect_adjustment_discontinuities(
                 )
 
 
+def detect_census_drift(
+    raw_census: dict[str, int],
+    lake_census: dict[str, int],
+    report: QualityReport,
+    *,
+    label: str = "ingest",
+    min_ratio: float = 0.95,
+    bucket_map: dict[str, str] | None = None,
+    ignore_buckets: set[str] | frozenset[str] | None = None,
+) -> None:
+    """Population-parity guard between a raw source payload and the lake.
+
+    Row-level validators cannot see records that never arrived. This check
+    compares field-distribution histograms instead:
+
+      1. MISSING-BUCKET: raw shows N>0 rows for a bucket but the lake
+         contains zero -> silent segment drop (the SM/ST delivery bug).
+      2. TOTAL-RATIO: lake rows must be >= min_ratio of raw rows, catching
+         partial drops even within accepted buckets.
+
+    ``bucket_map`` renames raw buckets into lake-space first (e.g.
+    {"SM": "SME", "ST": "SME"}) so differently-named axes compare cleanly.
+    Unmapped raw buckets pass through unchanged; mapped buckets merge by sum.
+    """
+    ignored = ignore_buckets or frozenset()
+    if bucket_map or ignored:
+        mapped: dict[str, int] = {}
+        for bucket, count in raw_census.items():
+            if bucket in ignored:
+                continue
+            target = bucket_map.get(bucket, bucket) if bucket_map else bucket
+            mapped[target] = mapped.get(target, 0) + int(count)
+        raw_census = mapped
+
+    for bucket in sorted(raw_census):
+        raw_n = int(raw_census[bucket])
+        if raw_n <= 0:
+            continue
+        lake_n = int(lake_census.get(bucket, 0))
+        if lake_n == 0:
+            report.add(
+                QualityIssue(
+                    "error",
+                    "CENSUS_DRIFT",
+                    f"{label}: raw '{bucket}'={raw_n} but lake has 0 rows",
+                )
+            )
+
+    total_raw = sum(int(v) for v in raw_census.values())
+    total_lake = sum(int(v) for v in lake_census.values())
+    if total_raw > 0 and (total_lake / total_raw) < min_ratio:
+        report.add(
+            QualityIssue(
+                "error",
+                "CENSUS_DROP",
+                f"{label}: lake rows {total_lake} below "
+                f"{min_ratio:.0%} of raw rows {total_raw}",
+            )
+        )
+
+
 def _weekdays_between(start: date, end: date) -> list[date]:
     days: list[date] = []
     cursor = start + timedelta(days=1)

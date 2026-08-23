@@ -17,6 +17,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import contextlib
 import json
 import sys
 import time
@@ -29,7 +30,9 @@ import pandas as pd
 
 from indian_quant.config import load_settings
 from indian_quant.ingestion.nse import BhavcopyIngester, parse_delivery_csv
+from indian_quant.ingestion.nse.bhavcopy import SERIES_SEGMENT
 from indian_quant.instruments import default_calendar
+from indian_quant.quality.validators import QualityReport, detect_census_drift
 from indian_quant.schemas import Timeframe
 from indian_quant.storage import MetadataStore, ParquetStore, RawStore
 
@@ -72,6 +75,19 @@ def index_raw_by_date(raw_root: Path, source: str, tool: str) -> dict[str, Path]
         except (OSError, ValueError):
             continue
     return out
+
+
+def census_check(label: str, raw_census: dict[str, int],
+                 lake_census: dict[str, int],
+                 bucket_map: dict[str, str] | None = None,
+                 ignore_buckets: set[str] | frozenset[str] | None = None
+                 ) -> list[dict]:
+    report = QualityReport(dataset=label)
+    detect_census_drift(raw_census, lake_census, report, label=label,
+                        bucket_map=bucket_map, ignore_buckets=ignore_buckets)
+    return [i.to_dict() if hasattr(i, "to_dict") else {
+        "severity": i.severity, "code": i.code, "detail": i.detail}
+        for i in report.issues]
 
 
 def segment_for_series(series: str) -> str | None:
@@ -125,6 +141,7 @@ def main() -> int:
     bars_buffer: dict[str, list[dict]] = {}
     delivery_buffer: dict[str, list[dict]] = {}
     parsed_since_flush = 0
+    census_errors: list[dict] = []
     t0 = time.time()
 
     def flush_bars() -> int:
@@ -188,8 +205,31 @@ def main() -> int:
                 payload = fetched
                 time.sleep(args.sleep)
             if payload:
-                for bar in ingester.parse_cm_zip(payload, day):
-                    sym = bar.instrument_id.split("|")[-1]
+                raw_series_census: dict[str, int] = {}
+                with contextlib.suppress(Exception):
+                    import csv as _csv
+                    import io as _io
+                    import zipfile as _zipfile
+
+                    with _zipfile.ZipFile(_io.BytesIO(payload)) as zf:
+                        cname = next(n for n in zf.namelist() if n.lower().endswith(".csv"))
+                        for row in _csv.DictReader(
+                            _io.StringIO(zf.read(cname).decode("utf-8-sig"))
+                        ):
+                            scry = (row.get("SctySrs") or "").strip()
+                            raw_series_census[scry] = raw_series_census.get(scry, 0) + 1
+
+                lake_segment_census: dict[str, int] = {}
+                for _day_i, bar in enumerate(
+                    ingester.parse_cm_zip(payload, day)
+                ):
+                    seg_prefix = (
+                        "SME"
+                        if bar.instrument_id.startswith("NSE_SME|")
+                        else "EQ"
+                    )
+                    lake_segment_census[seg_prefix] = (
+                        lake_segment_census.get(seg_prefix, 0) + 1)
                     bars_buffer.setdefault(bar.instrument_id, []).append({
                         "instrument_id": bar.instrument_id,
                         "exchange": "NSE",
@@ -202,7 +242,15 @@ def main() -> int:
                         "volume": bar.volume,
                         "source": "NSE",
                     })
-                    _ = sym
+                ignored_series = (
+                    set(raw_series_census) - set(SERIES_SEGMENT))
+                issues = census_check(
+                    f"bars:{key}", raw_series_census, lake_segment_census,
+                    bucket_map={k: v.value for k, v in SERIES_SEGMENT.items()},
+                    ignore_buckets=ignored_series)
+                if issues:
+                    census_errors.extend(issues)
+                    print(f"  CENSUS {key}: {issues}")
                 manifest.setdefault("bars_1d", set()).add(key)
                 did_work = True
             else:
@@ -216,15 +264,20 @@ def main() -> int:
                 text = fetched_text
                 time.sleep(args.sleep)
             if text:
+                raw_dl_census: dict[str, int] = {}
+                lake_dl_census: dict[str, int] = {}
                 for symbol, rec in parse_delivery_csv(text).items():
-                    segment = segment_for_series(str(rec.get("series", "")))
+                    series = str(rec.get("series", ""))
+                    raw_dl_census[series] = raw_dl_census.get(series, 0) + 1
+                    segment = segment_for_series(series)
                     if segment is None or "close" not in rec:
                         continue
+                    lake_dl_census[segment] = lake_dl_census.get(segment, 0) + 1
                     delivery_buffer.setdefault(symbol, []).append({
                         "date": key,
                         "symbol": symbol,
                         "segment": segment,
-                        "series": str(rec.get("series", "")),
+                        "series": series,
                         "close": float(rec["close"]),
                         "deliv_pct": (
                             float(rec["deliv_pct"]) if rec.get("deliv_pct") is not None
@@ -232,6 +285,11 @@ def main() -> int:
                         ),
                         "volume": float(rec.get("volume") or 0),
                     })
+                dl_issues = census_check(f"delivery:{key}", raw_dl_census,
+                                         {k: v for k, v in lake_dl_census.items()})
+                if dl_issues:
+                    census_errors.extend(dl_issues)
+                    print(f"  CENSUS {key}: {dl_issues}")
                 manifest.setdefault("delivery", set()).add(key)
                 did_work = True
             else:
@@ -261,6 +319,12 @@ def main() -> int:
     metadata.close()
     print(f"DONE in {time.time()-t0:.0f}s: wrote {n_bars_files} bar files, "
           f"{n_deliv_files} delivery files")
+    if census_errors:
+        print(f"CENSUS ERRORS: {len(census_errors)}")
+        for e in census_errors[:10]:
+            print(" ", e)
+        return 2
+    print("census parity: OK")
     return 0
 
 
