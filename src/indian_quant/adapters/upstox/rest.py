@@ -87,7 +87,16 @@ class UpstoxRestClient:
         instrument_id: str,
         exchange: str,
         timeframe: Timeframe,
+        normalize_daily_to_utc: bool = True,
     ) -> list[MarketBar]:
+        """Convert Upstox candle arrays into canonical bars.
+
+        Daily-and-coarser candles arrive stamped at IST midnight; they are
+        re-stamped to UTC midnight (same calendar date) so every daily bar in
+        the lake shares one timestamp convention. Intraday timeframes keep
+        their true instants untouched.
+        """
+
         candles = (payload.get("data") or {}).get("candles") or []
         bars: list[MarketBar] = []
         for row in candles:
@@ -95,7 +104,14 @@ class UpstoxRestClient:
                 continue
             ts_raw, o, h, low, c, v = row[0], row[1], row[2], row[3], row[4], row[5]
             oi = row[6] if len(row) > 6 else None
-            ts = datetime.fromisoformat(str(ts_raw)).astimezone(UTC)
+            ist_ts = datetime.fromisoformat(str(ts_raw))
+            if normalize_daily_to_utc and timeframe in (
+                Timeframe.DAY, Timeframe.WEEK, Timeframe.MONTH
+            ):
+                day = ist_ts.date()
+                ts = datetime(day.year, day.month, day.day, tzinfo=UTC)
+            else:
+                ts = ist_ts.astimezone(UTC)
             bars.append(
                 MarketBar(
                     instrument_id=instrument_id,
@@ -109,7 +125,7 @@ class UpstoxRestClient:
                     volume=float(v),
                     open_interest=float(oi) if oi is not None else None,
                     source="UPSTOX",
-                    source_timestamp=ts,
+                    source_timestamp=ist_ts.astimezone(UTC),
                     ingestion_timestamp=datetime.now(UTC),
                     adjustment_status=AdjustmentStatus.UNADJUSTED,
                 )

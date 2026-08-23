@@ -32,3 +32,6 @@ data/metadata.db
 
 # Rust
 rust/target/
+
+# Upstox token file (BseIndiaApi convention)
+upstox_tokens.json

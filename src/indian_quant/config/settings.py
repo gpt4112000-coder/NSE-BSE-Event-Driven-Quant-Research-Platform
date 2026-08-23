@@ -45,7 +45,24 @@ class UpstoxConfig(BaseModel):
     )
 
     def resolve_token(self) -> str | None:
-        return os.environ.get(self.access_token_env)
+        """Token resolution order: env var -> upstox_tokens.json (BseIndiaApi
+        convention, searched from CWD upward) -> None."""
+        token = os.environ.get(self.access_token_env)
+        if token:
+            return token
+        for candidate in [Path.cwd(), *Path.cwd().parents]:
+            token_file = candidate / "upstox_tokens.json"
+            if token_file.exists():
+                try:
+                    import json
+
+                    data = json.loads(token_file.read_text())
+                    value = str(data.get("access_token") or "")
+                    if value:
+                        return value
+                except (OSError, ValueError):
+                    continue
+        return None
 
     def resolve_api_key(self) -> str | None:
         return os.environ.get(self.api_key_env)

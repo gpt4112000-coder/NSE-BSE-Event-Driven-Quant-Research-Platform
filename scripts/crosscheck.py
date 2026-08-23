@@ -178,6 +178,56 @@ def main() -> int:
         else:
             print("delivery source unavailable; skipping pair")
 
+    want_upstox = args.pair in ("auto", "nse_cm_vs_upstox")
+    if want_upstox:
+        token = None
+        for candidate in [settings.data_root.parent, Path.cwd()]:
+            tf = candidate / "upstox_tokens.json"
+            if tf.exists():
+                token = json.loads(tf.read_text()).get("access_token")
+                break
+        if not token:
+            print("no upstox token; nse_cm_vs_upstox skipped")
+        else:
+            from indian_quant.adapters.upstox import UpstoxRestClient
+
+            isin_map = {"RELIANCE": "INE002A01018"}
+            isin = isin_map.get(symbol)
+            if not isin:
+                md_tmp = MetadataStore(settings.storage.metadata_dsn)
+                inst = md_tmp.get_instrument(f"NSE_EQ|{symbol}")
+                md_tmp.close()
+                isin = inst.get("isin") if inst else None
+            if not isin:
+                print(f"no ISIN known for {symbol}; nse_cm_vs_upstox skipped")
+            else:
+                client = UpstoxRestClient(
+                    access_token=token,
+                    raw_store=RawStore(settings.data_root / "raw"),
+                )
+                last_day = trading_dates[-1]
+                first_day = trading_dates[max(0, len(trading_dates) - 30)]
+                payload_u = client.historical_candles(
+                    f"NSE_EQ|{isin}", unit="days", interval=1,
+                    to_date=last_day, from_date=first_day,
+                )
+                ubars = client.candles_to_bars(
+                    payload_u, instrument_id=f"NSE_EQ|{symbol}",
+                    exchange="NSE", timeframe=__import__("indian_quant.schemas", fromlist=["Timeframe"]).Timeframe.DAY,
+                )
+                u_closes = {
+                    b.timestamp.date(): b.close for b in ubars
+                }
+                ux = pd.Series(u_closes).sort_index()
+                ux.index = pd.DatetimeIndex(
+                    pd.to_datetime(pd.Series(ux.index), utc=True)
+                ).normalize()
+                reports.append(compare_series(
+                    cm_closes, ux,
+                    pair="nse_cm_vs_upstox", symbol=symbol,
+                    warn_pct=args.warn_pct, error_pct=args.error_pct,
+                ))
+
     want_bse = args.pair in ("auto", "nse_cm_vs_bse_cm")
     if want_bse:
         bse_dir = settings.data_root / "normalized" / "bars_1d" / "BSE"
