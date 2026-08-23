@@ -230,6 +230,7 @@ def main() -> int:
                             float(rec["deliv_pct"]) if rec.get("deliv_pct") is not None
                             else None
                         ),
+                        "volume": float(rec.get("volume") or 0),
                     })
                 manifest.setdefault("delivery", set()).add(key)
                 did_work = True

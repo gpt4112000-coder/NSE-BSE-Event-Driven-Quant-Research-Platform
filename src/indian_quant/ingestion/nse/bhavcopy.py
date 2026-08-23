@@ -197,6 +197,8 @@ def parse_delivery_csv(text: str) -> dict[str, dict[str, Any]]:
         if pct not in ("", "-"):
             with contextlib.suppress(ValueError):
                 rec["deliv_pct"] = float(pct)
+        with contextlib.suppress(ValueError):
+            rec["volume"] = float(cleaned.get("TTL_TRD_QNTY", "") or 0)
         out[symbol] = rec
     return out
 

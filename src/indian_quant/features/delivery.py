@@ -44,7 +44,28 @@ def add_features(df: pd.DataFrame, *, window: int = 30) -> pd.DataFrame:
     flag = (out["deliv_pct"] >= 60).astype(int)
     group = flag * (flag.groupby((flag != flag.shift()).cumsum()).cumcount() + 1)
     out["hi_streak"] = group.where(flag > 0, 0)
+
+    if "volume" in out.columns:
+        out["volume"] = pd.to_numeric(out["volume"], errors="coerce")
+        vol_mean = out["volume"].rolling(window, min_periods=15).mean()
+        vol_std = out["volume"].rolling(window, min_periods=15).std().replace(0, np.nan)
+        out["vol_z"] = (out["volume"] - vol_mean) / vol_std
     return out
+
+
+def price_band(close: float) -> str:
+    if close < 50:
+        return "<50"
+    if close < 200:
+        return "50_200"
+    if close < 1000:
+        return "200_1000"
+    return ">1000"
+
+
+def cluster_entry_mask(mask: pd.Series) -> pd.Series:
+    """True only on the FIRST day of each consecutive True-run."""
+    return mask & ~mask.shift(fill_value=False)
 
 
 def signal_mask(frame: pd.DataFrame, name: str) -> pd.Series:

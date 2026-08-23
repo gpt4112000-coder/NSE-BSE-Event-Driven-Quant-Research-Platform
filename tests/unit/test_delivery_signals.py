@@ -34,6 +34,7 @@ def make_symbol_frame(n: int = 120, base_deliv: float = 45.0, seed: int = 1):
         "segment": "EQ",
         "close": close,
         "deliv_pct": deliv,
+        "volume": rng.integers(50_000, 200_000, n).astype(float),
     })
     return add_features(prepare_frame(df))
 
@@ -94,3 +95,25 @@ class TestEvaluate:
     def test_unknown_signal_raises(self):
         with pytest.raises(KeyError):
             evaluate_bucket([], "nope")
+
+
+class TestClusters:
+    def test_cluster_entry_mask_first_day_only(self):
+        from indian_quant.features.delivery import cluster_entry_mask
+
+        m = pd.Series([False, True, True, False, True])
+        assert list(cluster_entry_mask(m)) == [False, True, False, False, True]
+
+    def test_cluster_evaluation_runs(self):
+        frames = [make_symbol_frame() for _ in range(2)]
+        results = evaluate_bucket(frames, "streak3", horizons=(3,),
+                                  cluster_entries=True)
+        assert isinstance(results, dict)
+
+    def test_conditions_filter(self):
+        f = make_symbol_frame()
+        f["close"] = np.where(np.arange(len(f)) % 2 == 0, 40.0, 400.0)
+        from indian_quant.research.signals import apply_conditions
+
+        cond = apply_conditions(f, {"price_max": 100})
+        assert cond.sum() == len(f) // 2

@@ -48,24 +48,49 @@ def stability_split(values: np.ndarray) -> tuple[dict, dict]:
     return summarize(values[:half]), summarize(values[half:])
 
 
+def apply_conditions(frame: pd.DataFrame, conditions: dict) -> pd.Series:
+    """Compose a boolean context mask from simple filter conditions."""
+    out = pd.Series(True, index=frame.index)
+    if "price_max" in conditions:
+        out &= frame["close"] <= float(conditions["price_max"])
+    if "price_min" in conditions:
+        out &= frame["close"] >= float(conditions["price_min"])
+    if "volz_min" in conditions:
+        out &= frame.get("vol_z", pd.Series(np.nan, index=frame.index)) >= float(
+            conditions["volz_min"])
+    if "segment" in conditions:
+        out &= frame["segment"] == str(conditions["segment"])
+    return out
+
+
 def evaluate_bucket(
     frames: list[pd.DataFrame],
     signal_name: str,
     horizons: tuple[int, ...] = HORIZONS,
+    *,
+    cluster_entries: bool = False,
+    conditions: dict | None = None,
 ) -> dict:
     """Aggregate one signal across many prepared symbol frames.
 
-    Frames must carry add_features() columns plus a 'segment' column.
-    Returns {horizon: stats} with per-segment and stability breakdowns.
+    cluster_entries=True fires only on the first day of each consecutive
+    run of the (conditioned) mask - the cost-amortisation view.
     """
     if signal_name not in SIGNAL_NAMES:
         raise KeyError(f"unknown signal: {signal_name}")
+    conditions = conditions or {}
 
     buckets: dict[int, list[np.ndarray]] = {h: [] for h in horizons}
     segment_buckets: dict[tuple[str, int], list[np.ndarray]] = {}
 
     for frame in frames:
         mask = signal_mask(frame, signal_name)
+        if conditions:
+            mask = mask & apply_conditions(frame, conditions)
+        if cluster_entries:
+            from indian_quant.features.delivery import cluster_entry_mask
+
+            mask = cluster_entry_mask(mask)
         fired_idx = frame.index[mask]
         if not fired_idx.any():
             continue
