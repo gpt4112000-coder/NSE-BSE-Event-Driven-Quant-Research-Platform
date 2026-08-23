@@ -1,0 +1,140 @@
+[
+ {
+  "symbol": "AXISBANK",
+  "n_events": 438,
+  "mean_car_bps": -48.6,
+  "t": -1.8
+ },
+ {
+  "symbol": "BAJFINANCE",
+  "n_events": 228,
+  "mean_car_bps": -116.7,
+  "t": -1.23
+ },
+ {
+  "symbol": "BEL",
+  "n_events": 180,
+  "mean_car_bps": 204.3,
+  "t": 4.47
+ },
+ {
+  "symbol": "BHARTIARTL",
+  "n_events": 494,
+  "mean_car_bps": 30.8,
+  "t": 1.6
+ },
+ {
+  "symbol": "BSE",
+  "n_events": 333,
+  "mean_car_bps": 169.9,
+  "t": 2.16
+ },
+ {
+  "symbol": "DIXON",
+  "n_events": 343,
+  "mean_car_bps": 83.8,
+  "t": 1.77
+ },
+ {
+  "symbol": "ETERNAL",
+  "n_events": 103,
+  "mean_car_bps": 156.7,
+  "t": 2.07
+ },
+ {
+  "symbol": "GROWW",
+  "n_events": 85,
+  "mean_car_bps": 246.6,
+  "t": 2.48
+ },
+ {
+  "symbol": "HAL",
+  "n_events": 154,
+  "mean_car_bps": -4.6,
+  "t": -0.07
+ },
+ {
+  "symbol": "HDFCBANK",
+  "n_events": 290,
+  "mean_car_bps": -112.7,
+  "t": -2.1
+ },
+ {
+  "symbol": "ICICIBANK",
+  "n_events": 498,
+  "mean_car_bps": 42.9,
+  "t": 2.17
+ },
+ {
+  "symbol": "INDIGO",
+  "n_events": 249,
+  "mean_car_bps": 5.4,
+  "t": 0.13
+ },
+ {
+  "symbol": "INFY",
+  "n_events": 475,
+  "mean_car_bps": -131.5,
+  "t": -4.38
+ },
+ {
+  "symbol": "ITC",
+  "n_events": 212,
+  "mean_car_bps": -227.2,
+  "t": -7.34
+ },
+ {
+  "symbol": "KOTAKBANK",
+  "n_events": 305,
+  "mean_car_bps": -220.5,
+  "t": -2.61
+ },
+ {
+  "symbol": "LT",
+  "n_events": 329,
+  "mean_car_bps": 69.8,
+  "t": 2.23
+ },
+ {
+  "symbol": "M&M",
+  "n_events": 540,
+  "mean_car_bps": 68.2,
+  "t": 2.45
+ },
+ {
+  "symbol": "MARUTI",
+  "n_events": 297,
+  "mean_car_bps": 120.8,
+  "t": 3.8
+ },
+ {
+  "symbol": "RELIANCE",
+  "n_events": 360,
+  "mean_car_bps": -0.1,
+  "t": -0.01
+ },
+ {
+  "symbol": "SBIN",
+  "n_events": 419,
+  "mean_car_bps": 75.1,
+  "t": 2.77
+ },
+ {
+  "symbol": "TATASTEEL",
+  "n_events": 221,
+  "mean_car_bps": 107.6,
+  "t": 2.5
+ },
+ {
+  "symbol": "TCS",
+  "n_events": 360,
+  "mean_car_bps": -85.7,
+  "t": -2.95
+ },
+ {
+  "symbol": "VEDL",
+  "n_events": 484,
+  "mean_car_bps": -70.3,
+  "t": -1.31
+ }
+]
