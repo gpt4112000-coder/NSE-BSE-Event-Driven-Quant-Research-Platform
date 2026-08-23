@@ -17,6 +17,7 @@ class EventStudyResult:
     t_stat: float
     p_value: float
     car_by_offset: pd.DataFrame
+    cars: object | None = None  # raw per-event CAR array for pooling
 
 
 def event_study(
@@ -74,7 +75,7 @@ def event_study(
             "cum_mean_abnormal": arr.mean(axis=0).cumsum(),
         }
     )
-    return EventStudyResult(len(cars), (pre, post), mean_car, float(np.median(car_series)), t_stat, p_value, by_offset)
+    return EventStudyResult(len(cars), (pre, post), mean_car, float(np.median(car_series)), t_stat, p_value, by_offset, car_series)
 
 
 def build_event_table(announcements_df: pd.DataFrame) -> pd.DatetimeIndex:

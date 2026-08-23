@@ -1,0 +1,60 @@
+{
+ "generated": "2026-08-23T21:42:17.110188+00:00",
+ "symbols": 75,
+ "events": 19231,
+ "window": [
+  2,
+  10
+ ],
+ "table": [
+  {
+   "event_type": "M_A",
+   "n_events": 347,
+   "mean_car_bps": 124.0,
+   "hit_rate": 0.568,
+   "t_stat_pooled": 3.7
+  },
+  {
+   "event_type": "OTHER",
+   "n_events": 13654,
+   "mean_car_bps": 21.3,
+   "hit_rate": 0.526,
+   "t_stat_pooled": 2.91
+  },
+  {
+   "event_type": "BOARD_MEETING",
+   "n_events": 775,
+   "mean_car_bps": 71.4,
+   "hit_rate": 0.528,
+   "t_stat_pooled": 2.54
+  },
+  {
+   "event_type": "DIVIDEND",
+   "n_events": 196,
+   "mean_car_bps": 76.0,
+   "hit_rate": 0.51,
+   "t_stat_pooled": 1.23
+  },
+  {
+   "event_type": "INVESTOR_MEET",
+   "n_events": 3735,
+   "mean_car_bps": 2.4,
+   "hit_rate": 0.512,
+   "t_stat_pooled": 0.17
+  },
+  {
+   "event_type": "CREDIT_RATING",
+   "n_events": 351,
+   "mean_car_bps": -8.5,
+   "hit_rate": 0.493,
+   "t_stat_pooled": -0.2
+  },
+  {
+   "event_type": "RESULTS",
+   "n_events": 150,
+   "mean_car_bps": -218.3,
+   "hit_rate": 0.413,
+   "t_stat_pooled": -3.22
+  }
+ ]
+}
