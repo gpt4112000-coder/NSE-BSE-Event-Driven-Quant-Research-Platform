@@ -47,6 +47,49 @@ so it can gate CI or scheduling.
 | validate exits 2 | real data-quality errors | inspect report JSON printed above |
 | MCP timeout/retries exhausted | NSE rate limiting | increase `mcp.timeout_seconds`, reduce request rate |
 
+## Daily Upstox login
+
+```bash
+uv run python scripts/upstox_auth.py url      # print login URL
+# open URL, log in (chilakammanaru@gmail.com / naru app),
+# copy full redirected URL (contains ?code=...)
+uv run python scripts/upstox_auth.py login    # paste when prompted
+uv run python scripts/upstox_auth.py whoami   # verify
+```
+If a refresh token was stored: `scripts/upstox_auth.py refresh` skips the browser.
+Tokens expire ~03:30 IST daily.
+
+## Kill switch (C2)
+
+Backtests/live engines enforce RiskEngine limits from `configs/*.yaml`
+(`backtest.risk_*`). To halt trading at runtime: set engine trader state to
+HALT (`trader.stop()` in live; kill process for backtest) and investigate via
+reconciliation before resuming:
+
+```bash
+uv run python scripts/crosscheck.py --symbol RELIANCE     # data sanity
+uv run python -c "from indian_quant.adapters.upstox.reconciliation import Reconciler; ..."
+```
+
+Any reconciliation mismatch => do not resume until resolved.
+
+## Observability (C3)
+
+```bash
+uv run python scripts/metrics.py            # Prometheus text snapshot
+uv run python scripts/metrics.py --serve 9108
+```
+Structured JSON logging: `from indian_quant.config.logging_setup import setup_logging; setup_logging(json_mode=True)`.
+
+## Shadow session (B4)
+
+Monday during market hours:
+```bash
+uv run python scripts/shadow_session.py --keys "NSE_EQ|INE002A01018" --minutes 60 --mode full
+```
+Recording lands under `data/raw/upstox/feed_sessions/<id>/`; parity harness
+consumes it next.
+
 ## Upgrading nautilus_trader
 
 The integration pins behavior against specific Nautilus APIs (verified on

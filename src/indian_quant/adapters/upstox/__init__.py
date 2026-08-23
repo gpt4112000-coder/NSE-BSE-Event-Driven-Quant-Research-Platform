@@ -11,6 +11,7 @@ from indian_quant.adapters.upstox.execution import (
 from indian_quant.adapters.upstox.feed import (
     FeedDecoder,
     JsonFeedDecoder,
+    ProtoFeedDecoder,
     UpstoxFeedClient,
 )
 from indian_quant.adapters.upstox.rest import UpstoxRestClient
@@ -19,6 +20,7 @@ __all__ = [
     "ExecutionReport",
     "FeedDecoder",
     "JsonFeedDecoder",
+    "ProtoFeedDecoder",
     "OrderSide",
     "OrderType",
     "ProductType",

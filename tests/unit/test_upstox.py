@@ -47,10 +47,13 @@ class TestUpstoxRest:
 
 
 class TestUpstoxExecutionGuardrails:
-    def test_sandbox_only(self):
+    def test_submit_without_token_raises_guidance(self, monkeypatch, tmp_path):
+        monkeypatch.delenv("UPSTOX_SANDBOX_TOKEN", raising=False)
+        monkeypatch.chdir(tmp_path)
+        import asyncio
+
         client = UpstoxExecutionClient(UpstoxConfig(sandbox=True))
-        with pytest.raises(NotImplementedError):
-            import asyncio
+        with pytest.raises(RuntimeError, match="sandbox app"):
             asyncio.run(client.submit_order(SandboxOrderRequest(
                 instrument_key="NSE_EQ|INE002A01018", quantity=1, side=OrderSide.BUY)))
 

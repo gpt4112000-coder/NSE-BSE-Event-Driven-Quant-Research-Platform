@@ -16,6 +16,7 @@ dependencies = [
     "pyyaml>=6.0",
     "python-dateutil>=2.9",
     "nautilus_trader>=1.224",
+    "protobuf>=5.26",
 ]
 
 [project.optional-dependencies]
@@ -52,3 +53,8 @@ ignore = ["E501"]
 python_version = "3.12"
 ignore_missing_imports = true
 check_untyped_defs = true
+
+[[tool.mypy.overrides]]
+module = "indian_quant.adapters.upstox.proto.*"
+follow_imports = "skip"
+ignore_errors = true

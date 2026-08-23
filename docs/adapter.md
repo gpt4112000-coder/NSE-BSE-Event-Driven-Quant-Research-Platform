@@ -9,9 +9,16 @@ contracts. We do not fork NautilusTrader.
 
 | Component | Status | Location |
 |---|---|---|
-| REST Historical Candle V3 | **working** | `adapters/upstox/rest.py` |
-| Market Data Feed V3 WebSocket | scaffolded | `adapters/upstox/feed.py` |
-| Sandbox execution client | interface only (Phase 7) | `adapters/upstox/execution.py` |
+| Auth CLI (`login`/`refresh`/`whoami`) | **working** (live-verified) | `scripts/upstox_auth.py` |
+| REST Historical Candle V3 | **live-verified** - 30d RELIANCE, 0.0000% drift vs NSE bhavcopy | `adapters/upstox/rest.py` |
+| Crosscheck pair `nse_cm_vs_upstox` | **working** | `scripts/crosscheck.py` |
+| Feed V3 protobuf decoder | **implemented** - official schema, fixture-tested; live recording pending market hours | `adapters/upstox/feed.py` + `proto/` |
+| Sandbox execution lifecycle | implemented against V3 endpoints, mock-tested; live sandbox run needs a console-generated sandbox token | `adapters/upstox/execution.py` |
+| Reconciliation (C1) | **live-read-verified** (orders/positions/funds IO) | `adapters/upstox/reconciliation.py` |
+
+Sandbox tokens: created in the developer console's sandbox section
+(one per user, 30-day validity, no browser OAuth). Set via
+`UPSTOX_SANDBOX_TOKEN` or `upstox_sandbox_tokens.json`.
 
 ## REST Historical V3 (working)
 

@@ -79,6 +79,10 @@ class BacktestConfig(BaseModel):
     stt_sell_bps: float = 100.0
     stamp_buy_bps: float = 1.5
     flat_fee_per_order: float = 0.0
+    risk_max_order_submit_rate: str = "50/00:00:01"
+    risk_max_order_modify_rate: str = "50/00:00:01"
+    risk_max_notional_per_order: dict[str, int] | None = None
+    risk_bypass: bool = False
 
 
 class Settings(BaseModel):

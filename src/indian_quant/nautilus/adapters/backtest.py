@@ -10,6 +10,7 @@ from dataclasses import dataclass, field
 import pandas as pd
 from nautilus_trader.backtest.engine import BacktestEngine
 from nautilus_trader.backtest.models import FillModel
+from nautilus_trader.config import BacktestEngineConfig, RiskEngineConfig
 from nautilus_trader.model.currencies import INR
 from nautilus_trader.model.enums import AccountType, OmsType
 from nautilus_trader.model.identifiers import Venue
@@ -74,7 +75,17 @@ class BacktestRunner:
             trade_size=trade_size,
         )
 
-        engine = BacktestEngine()
+        bt = self.settings.backtest
+        risk_kwargs: dict = {
+            "max_order_submit_rate": bt.risk_max_order_submit_rate,
+            "max_order_modify_rate": bt.risk_max_order_modify_rate,
+            "bypass": bt.risk_bypass,
+        }
+        if bt.risk_max_notional_per_order:
+            risk_kwargs["max_notional_per_order"] = bt.risk_max_notional_per_order
+        engine = BacktestEngine(config=BacktestEngineConfig(
+            risk_engine=RiskEngineConfig(**risk_kwargs)
+        ))
         fill_model = FillModel(prob_fill_on_limit=1.0)
         bt = self.settings.backtest
         fee_model = IndiaDeliveryFeeModel(
