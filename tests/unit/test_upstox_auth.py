@@ -60,6 +60,9 @@ class TestTokenFile:
             "access_token": "", "extended_token": "REFRESH_ME"})
         )
         monkeypatch.setattr(
+            upstox_auth, "get_creds", lambda overrides=None: ("K", "S", "R")
+        )
+        monkeypatch.setattr(
             upstox_auth,
             "refresh_tokens",
             lambda **kw: {"access_token": "ROTATED"},
