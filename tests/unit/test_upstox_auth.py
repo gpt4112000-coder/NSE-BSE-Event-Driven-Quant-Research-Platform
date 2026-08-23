@@ -15,11 +15,11 @@ import upstox_auth  # noqa: E402
 class TestLoginUrl:
     def test_url_contains_encoded_params(self):
         url = upstox_auth.build_login_url(
-            "ac33617c-5189-4ed6-84ba-9e92865bd958", "https://280f95af306b.ngrok-free.app"
+            "test-key-1234", "https://280f95af306b.ngrok-free.app"
         )
         assert url.startswith(upstox_auth.LOGIN_DIALOG_URL + "?")
         assert "response_type=code" in url
-        assert "client_id=ac33617c-5189-4ed6-84ba-9e92865bd958" in url
+        assert "client_id=test-key-1234" in url
         assert (
             "redirect_uri=https%3A%2F%2F280f95af306b.ngrok-free.app" in url
         )

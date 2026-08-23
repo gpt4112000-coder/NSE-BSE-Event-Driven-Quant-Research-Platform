@@ -36,10 +36,15 @@ LOGIN_DIALOG_URL = "https://api.upstox.com/v2/login/authorization/dialog"
 TOKEN_URL = "https://api.upstox.com/v2/login/authorization/token"
 PROFILE_URL = "https://api.upstox.com/v2/user/profile"
 
-REDIRECT_FALLBACKS = [
-    ("ac33617c-5189-4ed6-84ba-9e92865bd958", "https://280f95af306b.ngrok-free.app"),
-    ("d27911a6-aac0-441b-bdfb-4586227e70f6", "https://0fbdb8253413.ngrok-free.app"),
-]
+def redirect_fallbacks() -> list[tuple[str, str]]:
+    """Optional secondary app credentials from .env - never hardcoded here."""
+    env = load_dotenv()
+    pairs: list[tuple[str, str]] = []
+    fb_key = env.get("UPSTOX_FALLBACK_API_KEY", "")
+    fb_redirect = env.get("UPSTOX_FALLBACK_REDIRECT_URI", "")
+    if fb_key and fb_redirect:
+        pairs.append((fb_key, fb_redirect))
+    return pairs
 
 
 def load_dotenv(path: Path = ENV_FILE) -> dict[str, str]:
