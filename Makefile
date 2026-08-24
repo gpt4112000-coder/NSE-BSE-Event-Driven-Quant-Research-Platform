@@ -1,4 +1,4 @@
-.PHONY: setup lint typecheck test mcp mcp-down ingest validate sync backtest events crosscheck status signals pipeline clean
+.PHONY: setup lint typecheck test mcp mcp-down ingest validate sync backtest events crosscheck status signals cluster-backtest deflate paper pipeline clean
 
 setup:
 	uv venv --allow-existing && uv pip install -e ".[dev]"
@@ -44,6 +44,17 @@ status:
 
 signals:
 	uv run python scripts/daily_signals.py
+
+cluster-backtest:
+	uv run python scripts/cluster_backtest.py
+
+deflate:
+	uv run python scripts/deflation_check.py
+
+paper:
+	uv run python scripts/paper_track.py snapshot
+	uv run python scripts/paper_track.py settle
+	uv run python scripts/paper_track.py report
 
 pipeline: ingest validate sync backtest
 

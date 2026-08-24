@@ -86,6 +86,23 @@ class MetadataStore:
                 source TEXT,
                 recorded_at TEXT NOT NULL
             );
+            CREATE TABLE IF NOT EXISTS paper_signals (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                created_at TEXT NOT NULL,
+                symbol TEXT NOT NULL,
+                segment TEXT,
+                side TEXT NOT NULL DEFAULT 'BUY',
+                close_at_signal REAL NOT NULL,
+                qty INTEGER NOT NULL,
+                horizon_days INTEGER NOT NULL,
+                stop_pct REAL NOT NULL,
+                status TEXT NOT NULL DEFAULT 'OPEN',
+                exit_date TEXT,
+                exit_close REAL,
+                realized_net_bps REAL,
+                note TEXT
+            );
+            CREATE INDEX IF NOT EXISTS idx_paper_status ON paper_signals(status, created_at);
             CREATE INDEX IF NOT EXISTS idx_symbol_events_isin ON symbol_events(isin, effective_date);
             CREATE INDEX IF NOT EXISTS idx_jobs_tool ON jobs(tool, started_at);
             CREATE INDEX IF NOT EXISTS idx_runs_kind ON runs(kind, started_at);
@@ -178,6 +195,58 @@ class MetadataStore:
         )
         self._con.commit()
         return int(cur.lastrowid or 0)
+
+    def record_paper_signal(self, *, symbol: str, close_at_signal: float, qty: int,
+                            horizon_days: int, stop_pct: float, segment: str | None = None,
+                            side: str = "BUY", note: str | None = None) -> int:
+        cur = self._con.execute(
+            """INSERT INTO paper_signals
+               (created_at, symbol, segment, side, close_at_signal, qty,
+                horizon_days, stop_pct, status, note)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'OPEN', ?)""",
+            (_now(), symbol.upper(), segment, side, close_at_signal, qty,
+             horizon_days, stop_pct, note),
+        )
+        self._con.commit()
+        return int(cur.lastrowid or 0)
+
+    def open_papers(self) -> list[dict]:
+        rows = self._con.execute(
+            "SELECT * FROM paper_signals WHERE status='OPEN' ORDER BY created_at"
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+    def settle_paper_signal(self, paper_id: int, *, exit_date: str,
+                            exit_close: float, cost_bps: float = 107.0) -> dict:
+        row = self._con.execute(
+            "SELECT * FROM paper_signals WHERE id=?", (paper_id,)).fetchone()
+        if not row:
+            raise ValueError(f"paper signal {paper_id} not found")
+        p = dict(row)
+        sign = 1.0 if p["side"] == "BUY" else -1.0
+        gross_bps = (exit_close / p["close_at_signal"] - 1.0) * 10_000 * sign
+        net_bps = gross_bps - cost_bps
+        self._con.execute(
+            """UPDATE paper_signals SET status='SETTLED', exit_date=?,
+               exit_close=?, realized_net_bps=? WHERE id=?""",
+            (exit_date, exit_close, round(net_bps, 2), paper_id),
+        )
+        self._con.commit()
+        return {"id": paper_id, "symbol": p["symbol"],
+                "gross_bps": round(gross_bps, 2),
+                "realized_net_bps": round(net_bps, 2)}
+
+    def papers_summary(self) -> dict:
+        settled = self._con.execute(
+            """SELECT COUNT(*) n, AVG(realized_net_bps) avg_net,
+               SUM(realized_net_bps > 0)*1.0/COUNT(*) hit
+               FROM paper_signals WHERE status='SETTLED'""").fetchone()
+        open_n = self._con.execute(
+            "SELECT COUNT(*) FROM paper_signals WHERE status='OPEN'").fetchone()[0]
+        return {"settled": settled["n"], "avg_net_bps": round(settled["avg_net"], 1)
+                if settled["avg_net"] is not None else None,
+                "hit_rate": round(settled["hit"], 3) if settled["hit"] is not None else None,
+                "open": open_n}
 
     def record_symbol_event(
         self,
