@@ -102,3 +102,26 @@ hold accounting nuance) or limit entries shave ≥10bps.
    tick recordings to estimate passive-fill rates honestly.
 3. SME 3d remains the highest-gross density; needs liquidity screening
    (vol_z) before sizing claims.
+
+
+---
+
+## B4 · Level-3 execution proof (Aug 24 2026, live market)
+
+Session `20260824_133821` recorded 13:38–14:38 IST via Upstox Feed V3
+(authorize-redirect flow resolved to wsfeeder-api; binary protobuf frames,
+`full_d5` mode): **17,528 decoded records**, RELIANCE + NIFTY 50.
+
+Replay-parity harness (`scripts/replay_parity.py`): SMA(5/15) signal
+sequences from LIVE stream order vs AGGREGATED one-minute bars:
+
+| instrument | bars | transitions | parity |
+|---|---|---|---|
+| NSE_EQ\|INE002A01018 | 61 | [-1,1,-1,1] both paths | ✅ |
+| NSE_INDEX\|Nifty 50 | 61 | [-1,1,-1,1] both paths | ✅ |
+
+**Interpretation:** strategies produce byte-identical decisions on live
+stream and historical replay — the architectural promise ("same strategy,
+same behaviour, only the data source changes") is now empirically proven.
+This also unblocks passive-fill modelling for the price<100 candidate
+from R2b using the recorded tick tape.

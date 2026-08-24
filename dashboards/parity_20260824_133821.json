@@ -1,0 +1,37 @@
+{
+  "instruments": {
+    "NSE_EQ|INE002A01018": {
+      "bars": 61,
+      "replay_events": [
+        -1,
+        1,
+        -1,
+        1
+      ],
+      "live_events": [
+        -1,
+        1,
+        -1,
+        1
+      ],
+      "parity": true
+    },
+    "NSE_INDEX|Nifty 50": {
+      "bars": 61,
+      "replay_events": [
+        -1,
+        1,
+        -1,
+        1
+      ],
+      "live_events": [
+        -1,
+        1,
+        -1,
+        1
+      ],
+      "parity": true
+    }
+  },
+  "parity": true
+}
