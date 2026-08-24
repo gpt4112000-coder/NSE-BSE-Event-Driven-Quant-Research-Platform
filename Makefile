@@ -1,4 +1,8 @@
-.PHONY: setup lint typecheck test mcp mcp-down ingest validate sync backtest events crosscheck status signals cluster-backtest deflate paper pipeline clean
+.PHONY: setup lint typecheck test mcp mcp-down ingest validate sync backtest events crosscheck status signals cluster-backtest deflate paper update pipeline clean
+
+TODAY_IST := $(shell TZ=Asia/Kolkata date +%Y-%m-%d)
+FROM ?= $(TODAY_IST)
+TO ?= $(TODAY_IST)
 
 setup:
 	uv venv --allow-existing && uv pip install -e ".[dev]"
@@ -55,6 +59,16 @@ paper:
 	uv run python scripts/paper_track.py snapshot
 	uv run python scripts/paper_track.py settle
 	uv run python scripts/paper_track.py report
+
+# ---- Evening cycle (after ~18:30 IST, once NSE publishes bhavcopy) ----
+update:
+	@echo "=== make update | window $(FROM)..$(TO) (IST today: $(TODAY_IST)) ==="
+	uv run python scripts/bulk_ingest.py --from $(FROM) --to $(TO)
+	uv run python scripts/daily_signals.py
+	uv run python scripts/paper_track.py settle || true
+	uv run python scripts/paper_track.py snapshot
+	uv run python scripts/status_report.py
+	@echo "=== update complete ==="
 
 pipeline: ingest validate sync backtest
 

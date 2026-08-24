@@ -47,6 +47,20 @@ so it can gate CI or scheduling.
 | validate exits 2 | real data-quality errors | inspect report JSON printed above |
 | MCP timeout/retries exhausted | NSE rate limiting | increase `mcp.timeout_seconds`, reduce request rate |
 
+## Evening Cycle (after ~18:30 IST, once NSE publishes bhavcopy)
+
+```bash
+make update                 # today only (IST-aware)
+make update FROM=2026-08-24 TO=2026-08-24   # explicit window
+```
+
+Chain: bulk-ingest today -> daily signals -> paper settle+snapshot ->
+status dashboard refresh. Idempotent: re-running the same day is a no-op
+(raw cache + parse manifest + open-position guards).
+
+Logs (cron mode): `logs/update-<date>.log`. Install unattended run via:
+`45 18 * * 1-5 /bin/bash "<repo>/scripts/daily_update.sh"`
+
 ## Daily Upstox login
 
 ```bash

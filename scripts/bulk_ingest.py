@@ -285,8 +285,11 @@ def main() -> int:
                         ),
                         "volume": float(rec.get("volume") or 0),
                     })
-                dl_issues = census_check(f"delivery:{key}", raw_dl_census,
-                                         {k: v for k, v in lake_dl_census.items()})
+                dl_issues = census_check(
+                    f"delivery:{key}", raw_dl_census,
+                    {k: v for k, v in lake_dl_census.items()},
+                    bucket_map={"BE": "EQ", "BZ": "EQ",
+                                "SM": "SME", "ST": "SME"})
                 if dl_issues:
                     census_errors.extend(dl_issues)
                     print(f"  CENSUS {key}: {dl_issues}")
