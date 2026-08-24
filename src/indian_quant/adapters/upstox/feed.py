@@ -162,7 +162,7 @@ class UpstoxFeedClient:
         self.config = config
         self.decoder = decoder or ProtoFeedDecoder()
         self.on_records = on_records
-        self._ws = None
+        self._ws: Any | None = None
         self._connected = False
 
     async def _authorize_url(self) -> str:
