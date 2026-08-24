@@ -44,12 +44,29 @@ class UpstoxConfig(BaseModel):
         "https://assets.upstox.com/market-quote/instruments/exchange/complete.csv.gz"
     )
 
+    def _env_file_token(self) -> str | None:
+        """Read UPSTOX_ACCESS_TOKEN from .env files near the project root."""
+        for candidate in [Path.cwd(), *Path.cwd().parents]:
+            env_file = candidate / ".env"
+            if not env_file.exists():
+                continue
+            for line in env_file.read_text().splitlines():
+                stripped = line.strip()
+                if stripped.startswith(f"{self.access_token_env}="):
+                    value = stripped.split("=", 1)[1].strip().strip("'\"")
+                    if value:
+                        return value
+        return None
+
     def resolve_token(self) -> str | None:
         """Token resolution order: env var -> upstox_tokens.json (BseIndiaApi
-        convention, searched from CWD upward) -> None."""
+        convention, searched from CWD upward) -> .env file -> None."""
         token = os.environ.get(self.access_token_env)
         if token:
             return token
+        env_token = self._env_file_token()
+        if env_token:
+            return env_token
         for candidate in [Path.cwd(), *Path.cwd().parents]:
             token_file = candidate / "upstox_tokens.json"
             if token_file.exists():

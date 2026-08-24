@@ -166,13 +166,34 @@ class UpstoxFeedClient:
         self._connected = False
 
     async def _authorize_url(self) -> str:
+        """Resolve the feed socket URL via Upstox's authorize-redirect flow.
+
+        GET {rest}/v3/feed/market-data-feed with Bearer auth returns 302
+        whose Location is the live wss endpoint (token embedded).
+        """
         token = self.config.resolve_token()
         if not token:
             raise RuntimeError(
-                f"missing access token; set {self.config.access_token_env} env var "
-                "(or upstox_tokens.json)"
+                f"missing access token; set {self.config.access_token_env} "
+                "(or upstox_tokens.json / .env)"
             )
-        return f"{self.config.ws_url}?authorization={token}"
+        rest_base = "https://api.upstox.com"
+        resp = httpx.get(
+            f"{rest_base}/v3/feed/market-data-feed",
+            headers={"Authorization": f"Bearer {token}",
+                     "Accept": "*/*"},
+            follow_redirects=False,
+            timeout=20,
+        )
+        if resp.status_code in (301, 302, 303, 307, 308):
+            location = resp.headers.get("location")
+            if location:
+                return location
+        if resp.status_code == 200:
+            return f"{self.config.ws_url}?authorization={token}"
+        raise RuntimeError(
+            f"feed authorize failed ({resp.status_code}): {resp.text[:150]}"
+        )
 
     async def connect(self) -> None:
         import websockets  # optional runtime dependency
