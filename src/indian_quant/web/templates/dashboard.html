@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+{% block title %}Dashboard{% endblock %}
+{% block nav_dashboard %}active{% endblock %}
+{% block content %}
+<h1>Dashboard</h1>
+
+<div class="section-title">Go-Live Gate</div>
+<div class="card">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+    <span>Paper Gate Progress</span>
+    {% if gate.passed %}
+      <span class="badge badge-green">PASSED — GO-LIVE READY</span>
+    {% else %}
+      <span class="badge badge-orange">{{ gate.settled }}/{{ gate.target }} settled</span>
+    {% endif %}
+  </div>
+  <div class="progress-bar"><div class="progress-fill" style="width:{{ gate.pct }}%"></div></div>
+  <div class="sub">
+    {{ gate.settled }} settled · avg_net
+    {% if gate.avg_net_bps is not none %}{{ gate.avg_net_bps }}bps{% else %}pending{% endif %}
+    (floor {{ gate.floor_bps }}bps)
+    {% if not gate.net_ok %}<span class="warn">· net below floor</span>{% endif %}
+  </div>
+</div>
+
+<div class="section-title">Paper Positions</div>
+<div class="grid grid-4">
+  <div class="card"><div class="label">Open Positions</div><div class="value neutral">{{ papers.open }}</div></div>
+  <div class="card"><div class="label">Settled Trades</div><div class="value">{{ papers.settled }}</div></div>
+  <div class="card"><div class="label">Avg Net BPS</div><div class="value {% if papers.avg_net_bps and papers.avg_net_bps > 0 %}good{% elif papers.avg_net_bps and papers.avg_net_bps < 0 %}bad{% else %}neutral{% endif %}">
+    {{ papers.avg_net_bps if papers.avg_net_bps is not none else '—' }}</div></div>
+  <div class="card"><div class="label">Hit Rate</div><div class="value">{{ (papers.hit_rate * 100) | round(1) if papers.hit_rate else '—' }}%</div></div>
+</div>
+
+<div class="section-title">Open Paper Positions</div>
+{% if papers.open_positions %}
+<table><tr><th>Symbol</th><th>Segment</th><th>Side</th><th>Entry Price</th><th>Qty</th><th>Stop %</th><th>Horizon</th><th>Opened</th></tr>
+{% for p in papers.open_positions %}
+<tr><td class="mono" style="color:var(--green)">{{ p.symbol }}</td><td>{{ p.segment }}</td><td>{{ p.side }}</td><td class="mono">₹{{ '%.2f'|format(p.close_at_signal) }}</td><td>{{ p.qty }}</td><td>{{ (p.stop_pct * 100)|round(0) }}%</td><td>{{ p.horizon_days }}d</td><td class="mono" style="font-size:11px">{{ p.created_at[:10] }}</td></tr>
+{% endfor %}</table>
+{% else %}
+<div class="empty">No open paper positions</div>
+{% endif %}
+
+<div class="section-title">Today's Signals ({{ signals.date if signals.date else 'no data' }})</div>
+{% if signals.buys %}
+<table><tr><th>Stock</th><th>Segment</th><th>Close</th><th>Delivery %</th><th>Z-Score</th><th>1d Return %</th></tr>
+{% for s in signals.buys %}
+<tr><td class="mono" style="color:var(--green)">{{ s.symbol }}</td><td>{{ s.segment }}</td><td class="mono">₹{{ s.close }}</td><td>{{ s.deliv_pct }}%</td><td class="mono good">{{ s.deliv_z }}</td><td class="{% if s.ret_1d_pct > 0 %}good{% else %}bad{% endif %}">{{ s.ret_1d_pct }}%</td></tr>
+{% endfor %}</table>
+{% else %}
+<div class="empty">No BUY candidates today — discipline is also a position</div>
+{% endif %}
+
+{% if signals.avoids %}
+<div class="section-title">🔴 Avoid / Exit-Watch</div>
+<table><tr><th>Stock</th><th>Close</th><th>Delivery %</th><th>Z-Score</th></tr>
+{% for s in signals.avoids %}
+<tr><td class="mono" style="color:var(--red)">{{ s.symbol }}</td><td class="mono">₹{{ s.close }}</td><td>{{ s.deliv_pct }}%</td><td class="mono warn">{{ s.deliv_z }}</td></tr>
+{% endfor %}</table>
+{% endif %}
+
+{% endblock %}

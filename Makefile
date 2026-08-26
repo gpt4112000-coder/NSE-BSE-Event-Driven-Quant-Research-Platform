@@ -55,6 +55,9 @@ cluster-backtest:
 deflate:
 	uv run python scripts/deflation_check.py
 
+web:
+	uv run python scripts/run_web.py
+
 paper:
 	uv run python scripts/paper_track.py snapshot
 	uv run python scripts/paper_track.py settle

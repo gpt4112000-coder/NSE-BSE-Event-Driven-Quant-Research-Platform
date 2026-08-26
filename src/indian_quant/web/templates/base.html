@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="refresh" content="60">
+<title>{% block title %}NSE-BSE Quant{% endblock %} · indian-quant</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+<style>
+:root{
+  --bg:#070b12;--bg2:#0b1220;--panel:#0e1626;--line:#1c2a42;
+  --txt:#dbe7ff;--dim:#7d90b5;--faint:#4a5d80;
+  --green:#00e5a0;--blue:#4da3ff;--orange:#ffb454;--red:#ff6b81;
+  --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:var(--bg);color:var(--txt);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;line-height:1.55;font-size:14px}
+a{color:var(--blue);text-decoration:none} a:hover{text-decoration:underline}
+nav{background:#0a0e18;border-bottom:1px solid var(--line);padding:10px 24px;display:flex;gap:20px;align-items:center}
+nav .logo{font-family:var(--mono);font-weight:bold;color:var(--green);font-size:15px}
+nav a.nav-link{color:var(--dim);font-size:13px;padding:6px 12px;border-radius:6px}
+nav a.nav-link:hover{color:var(--txt);background:rgba(77,163,255,.1)}
+nav a.nav-link.active{color:var(--green)}
+.container{max-width:1200px;margin:0 auto;padding:24px}
+h1{font-size:22px;color:var(--green)} h2{font-size:16px;margin:24px 0 12px}
+.grid{display:grid;gap:16px}
+.grid-4{grid-template-columns:repeat(auto-fit,minmax(220px,1fr))}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:18px 20px}
+.card .label{font-size:11px;color:var(--faint);text-transform:uppercase;letter-spacing:1px;margin-bottom:6px}
+.card .value{font-size:28px;font-weight:bold}
+.card .sub{font-size:12px;color:var(--dim);margin-top:4px}
+.good{color:var(--green)} .bad{color:var(--red)} .warn{color:var(--orange)} .neutral{color:var(--blue)}
+table{width:100%;border-collapse:collapse;margin-top:12px;font-size:13px}
+th{text-align:left;padding:8px 12px;color:var(--faint);font-weight:normal;text-transform:uppercase;font-size:11px;letter-spacing:1px;border-bottom:1px solid var(--line)}
+td{padding:8px 12px;border-bottom:1px solid rgba(28,42,66,.5)}
+.progress-bar{height:8px;background:var(--bg2);border-radius:4px;overflow:hidden;margin-top:8px}
+.progress-fill{height:100%;border-radius:4px;background:linear-gradient(90deg,var(--blue),var(--green));transition:width .5s}
+.badge{display:inline-block;padding:3px 10px;border-radius:999px;font-size:11px;font-family:var(--mono)}
+.badge-green{color:var(--green);border:1px solid rgba(0,229,160,.35);background:rgba(0,229,160,.08)}
+.badge-red{color:var(--red);border:1px solid rgba(255,107,129,.35);background:rgba(255,107,129,.08)}
+.badge-orange{color:var(--orange);border:1px solid rgba(255,180,84,.35);background:rgba(255,180,84,.08)}
+.mono{font-family:var(--mono)}
+.section-title{font-size:13px;color:var(--green);margin:28px 0 12px;text-transform:uppercase;letter-spacing:1.5px;font-family:var(--mono)}
+.empty{color:var(--faint);padding:20px;text-align:center;font-style:italic}
+.chart-container{position:relative;height:250px;margin-top:12px}
+</style>
+</head>
+<body>
+<nav>
+  <span class="logo">&gt;_ quant</span>
+  <a class="nav-link {% block nav_dashboard %}{% endblock %}" href="/">Dashboard</a>
+  <a class="nav-link {% block nav_signals %}{% endblock %}" href="/signals">Signals</a>
+  <a class="nav-link {% block nav_positions %}{% endblock %}" href="/positions">Positions</a>
+  <a class="nav-link {% block nav_research %}{% endblock %}" href="/research">Research</a>
+</nav>
+<div class="container" style="padding-top:20px">
+{% block content %}{% endblock %}
+</div>
+</body>
+</html>

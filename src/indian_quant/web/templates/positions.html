@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block title %}Positions{% endblock %}
+{% block nav_positions %}active{% endblock %}
+{% block content %}
+<h1>Paper Positions</h1>
+
+<div class="grid grid-4">
+  <div class="card"><div class="label">Open</div><div class="value neutral">{{ papers.open }}</div></div>
+  <div class="card"><div class="label">Settled</div><div class="value">{{ papers.settled }}</div></div>
+  <div class="card"><div class="label">Avg Net BPS</div><div class="value">{{ papers.avg_net_bps if papers.avg_net_bps is not none else '—' }}</div></div>
+  <div class="card"><div class="label">Hit Rate</div><div class="value">{{ (papers.hit_rate * 100)|round(1) if papers.hit_rate else '—' }}%</div></div>
+</div>
+
+{% if papers.open_positions %}
+<h2>Open Positions</h2>
+<table><tr><th>Symbol</th><th>Side</th><th>Entry</th><th>Qty</th><th>Stop %</th><th>Horizon</th><th>Note</th></tr>
+{% for p in papers.open_positions %}
+<tr><td class="mono" style="color:var(--green)">{{ p.symbol }}</td><td>{{ p.side }}</td><td class="mono">₹{{ '%.2f'|format(p.close_at_signal) }}</td><td>{{ p.qty }}</td><td>{{ (p.stop_pct * 100)|int }}%</td><td>{{ p.horizon_days }}d</td><td class="mono" style="font-size:11px;color:var(--dim)">{{ p.note or '' }}</td></tr>
+{% endfor %}</table>
+{% endif %}
+
+{% endblock %}

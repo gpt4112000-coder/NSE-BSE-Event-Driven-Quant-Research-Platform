@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block title %}Announcements{% endblock %}
+{% block content %}
+<h1>Announcements · {{ symbol }}</h1>
+
+{% if announcements %}
+<table><tr><th>Date</th><th>Category</th><th>Headline</th><th>Document</th></tr>
+{% for a in announcements %}
+<tr><td class="mono" style="font-size:12px;white-space:nowrap">{{ a.published_at[:10] if a.published_at else '' }}</td>
+<td>{{ a.category or '' }}</td>
+<td>{{ a.headline[:120] if a.headline else '' }}</td>
+<td>{% if a.document_url %}<a href="{{ a.document_url }}" target="_blank">📄 PDF</a>{% endif %}</td></tr>
+{% endfor %}</table>
+{% else %}
+<div class="empty">No announcements for {{ symbol }}</div>
+{% endif %}
+
+<h2>Browse Other Symbols</h2>
+<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:10px">
+{% for sym in available_symbols %}
+<a href="/announcements/{{ sym }}" class="nav-link" style="border:1px solid var(--line);padding:4px 10px;border-radius:5px;font-size:12px">{{ sym }}</a>
+{% endfor %}
+</div>
+{% endblock %}

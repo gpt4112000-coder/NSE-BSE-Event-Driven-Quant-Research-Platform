@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block title %}Research{% endblock %}
+{% block nav_research %}active{% endblock %}
+{% block content %}
+<h1>Research Results</h1>
+
+{% if research.delivery_sweep %}
+<h2>Delivery Sweep — Full Universe</h2>
+<table><tr><th>Signal</th><th>Horizon</th><th>n</th><th>Gross bps</th><th>t-stat</th></tr>
+{% for r in research.delivery_sweep.ranked[:15] %}
+<tr><td class="mono">{{ r.signal }}</td><td>{{ r.horizon }}d</td><td>{{ r.n }}</td><td class="{% if r.mean_bps > 0 %}good{% else %}bad{% endif %}">{{ r.mean_bps }}</td><td class="mono">{{ r.t_stat or '—' }}</td></tr>
+{% endfor %}</table>
+{% endif %}
+
+{% if research.event_type_car %}
+<h2>Event-Type CAR Study</h2>
+<table><tr><th>Type</th><th>n</th><th>CAR bps</th><th>t-stat</th></tr>
+{% for r in research.event_type_car.table %}
+<tr><td class="mono">{{ r.event_type }}</td><td>{{ r.n_events }}</td><td class="{% if r.mean_car_bps > 0 %}good{% else %}bad{% endif %}">{{ r.mean_car_bps }}</td><td class="mono">{{ r.t_stat_pooled }}</td></tr>
+{% endfor %}</table>
+{% endif %}
+
+{% if research.deflation_verdict %}
+<h2>Deflation Verdict</h2>
+<p>{{ research.deflation_verdict.n_hypotheses }} hypotheses tested · Target survives: 
+<b class="{% if research.deflation_verdict.target_survives_both %}good{% else %}bad{% endif %}">
+{{ 'YES' if research.deflation_verdict.target_survives_both else 'NO' }}</b></p>
+{% endif %}
+
+{% endblock %}

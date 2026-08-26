@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block title %}Signals{% endblock %}
+{% block nav_signals %}active{% endblock %}
+{% block content %}
+<h1>Signal Sheet</h1>
+{% if signals.date %}
+<div class="sub" style="color:var(--faint);margin-bottom:16px">Data through {{ signals.date }} · {{ signals.total_scanned }} symbols scanned</div>
+
+<h2>🟢 Accumulation Candidates (dz_hi_up)</h2>
+{% if signals.buys %}
+<table><tr><th>#</th><th>Symbol</th><th>Segment</th><th>Close</th><th>Delivery %</th><th>Z-Score</th><th>1d Return</th></tr>
+{% for s in signals.buys %}
+<tr><td>{{ loop.index }}</td><td class="mono good">{{ s.symbol }}</td><td>{{ s.segment }}</td><td class="mono">₹{{ s.close }}</td><td class="mono">{{ s.deliv_pct }}%</td><td class="mono">{{ s.deliv_z }}</td><td>{% if s.ret_1d_pct > 0 %}+{% endif %}{{ s.ret_1d_pct }}%</td></tr>
+{% endfor %}</table>
+{% else %}<div class="empty">No accumulation signals today</div>{% endif %}
+
+{% if signals.avoids %}
+<h2>🔴 Distribution / Avoid</h2>
+<table><tr><th>Symbol</th><th>Segment</th><th>Close</th><th>Delivery %</th><th>Z-Score</th><th>1d Return</th></tr>
+{% for s in signals.avoids %}
+<tr><td class="mono bad">{{ s.symbol }}</td><td>{{ s.segment }}</td><td class="mono">₹{{ s.close }}</td><td class="mono">{{ s.deliv_pct }}%</td><td class="mono warn">{{ s.deliv_z }}</td><td>{{ s.ret_1d_pct }}%</td></tr>
+{% endfor %}</table>
+{% endif %}
+
+<p style="margin-top:20px;color:var(--faint);font-size:12px">
+  Entry via limit orders. Hold ~3-10 days. Stop at 7%. Re-check after 18:30 IST for fresh data.
+</p>
+{% else %}
+<div class="empty">No signal data available. Run <code>make update</code> first.</div>
+{% endif %}
+{% endblock %}
