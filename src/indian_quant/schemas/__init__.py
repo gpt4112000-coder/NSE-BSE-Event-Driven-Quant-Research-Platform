@@ -15,6 +15,7 @@ from indian_quant.schemas.enums import (
     QualityStatus,
     SecurityType,
     Segment,
+    SignalName,
     Timeframe,
 )
 from indian_quant.schemas.events import RegimeLabel, ResearchEvent
@@ -47,6 +48,7 @@ __all__ = [
     "ResearchEvent",
     "SecurityType",
     "Segment",
+    "SignalName",
     "Timeframe",
     "bars_to_frame",
     "make_instrument_id",

@@ -1,0 +1,156 @@
+{
+ "run_id": "sme_dz_hi_up_5d-0323aff1033f5c83-64afb8c2",
+ "generated": "2026-08-25T22:44:11.567001+00:00",
+ "signal": "dz_hi_up",
+ "horizon_days": 5,
+ "stop": null,
+ "sme": {
+  "n_trades": 337,
+  "mean_gross_bps": 63.0,
+  "median_bps": -71.2,
+  "win_rate": 0.454,
+  "t_stat": 1.26,
+  "std_bps": 915.4,
+  "best_trade_bps": 3880.6,
+  "worst_trade_bps": -2058.3,
+  "first_half_mean_bps": 32.6,
+  "second_half_mean_bps": 93.3
+ },
+ "sme_top_symbols": [
+  {
+   "symbol": "ESFL",
+   "n_signals": 7,
+   "mean_bps": 87.0,
+   "hit_rate": 0.571
+  },
+  {
+   "symbol": "ALLETEC",
+   "n_signals": 6,
+   "mean_bps": 143.5,
+   "hit_rate": 0.667
+  },
+  {
+   "symbol": "TUNWAL",
+   "n_signals": 6,
+   "mean_bps": 152.7,
+   "hit_rate": 0.333
+  },
+  {
+   "symbol": "SYSTANGO",
+   "n_signals": 5,
+   "mean_bps": -2.9,
+   "hit_rate": 0.6
+  },
+  {
+   "symbol": "WTICAB",
+   "n_signals": 5,
+   "mean_bps": -354.5,
+   "hit_rate": 0.2
+  },
+  {
+   "symbol": "KLL",
+   "n_signals": 5,
+   "mean_bps": 619.0,
+   "hit_rate": 0.6
+  },
+  {
+   "symbol": "ENVIRO",
+   "n_signals": 5,
+   "mean_bps": 243.9,
+   "hit_rate": 0.8
+  },
+  {
+   "symbol": "MAITREYA",
+   "n_signals": 5,
+   "mean_bps": 85.9,
+   "hit_rate": 0.6
+  },
+  {
+   "symbol": "FRESHARA",
+   "n_signals": 5,
+   "mean_bps": 81.6,
+   "hit_rate": 0.8
+  },
+  {
+   "symbol": "VGINFOTECH",
+   "n_signals": 5,
+   "mean_bps": -381.4,
+   "hit_rate": 0.2
+  },
+  {
+   "symbol": "ALPEXSOLAR",
+   "n_signals": 4,
+   "mean_bps": 671.8,
+   "hit_rate": 1.0
+  },
+  {
+   "symbol": "HIGREEN",
+   "n_signals": 4,
+   "mean_bps": 1393.1,
+   "hit_rate": 0.75
+  },
+  {
+   "symbol": "PRIZOR",
+   "n_signals": 4,
+   "mean_bps": 68.2,
+   "hit_rate": 0.25
+  },
+  {
+   "symbol": "REMUS",
+   "n_signals": 4,
+   "mean_bps": 284.7,
+   "hit_rate": 0.5
+  },
+  {
+   "symbol": "VIESL",
+   "n_signals": 4,
+   "mean_bps": 546.5,
+   "hit_rate": 0.75
+  },
+  {
+   "symbol": "CGRAPHICS",
+   "n_signals": 4,
+   "mean_bps": -623.5,
+   "hit_rate": 0.0
+  },
+  {
+   "symbol": "KODYTECH",
+   "n_signals": 4,
+   "mean_bps": 229.6,
+   "hit_rate": 0.5
+  },
+  {
+   "symbol": "BAHETI",
+   "n_signals": 4,
+   "mean_bps": 466.3,
+   "hit_rate": 0.75
+  },
+  {
+   "symbol": "WOMANCART",
+   "n_signals": 4,
+   "mean_bps": -345.6,
+   "hit_rate": 0.25
+  },
+  {
+   "symbol": "EFFWA",
+   "n_signals": 3,
+   "mean_bps": -196.7,
+   "hit_rate": 0.333
+  }
+ ],
+ "eq_baseline": {
+  "n_trades": 5769,
+  "mean_gross_bps": 47.5,
+  "median_bps": -16.2,
+  "win_rate": 0.483,
+  "t_stat": 4.87,
+  "std_bps": 740.4,
+  "best_trade_bps": 6001.1,
+  "worst_trade_bps": -9007.1,
+  "first_half_mean_bps": 39.3,
+  "second_half_mean_bps": 55.6
+ },
+ "random_control": {
+  "n": 0
+ }
+}

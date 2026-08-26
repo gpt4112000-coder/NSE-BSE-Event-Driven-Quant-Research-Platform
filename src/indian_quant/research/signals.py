@@ -7,7 +7,12 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from indian_quant.features.delivery import SIGNAL_NAMES, add_features, prepare_frame, signal_mask
+from indian_quant.features.delivery import (
+    SIGNAL_NAMES,
+    add_features,
+    prepare_frame,
+    signal_mask_with_filters,
+)
 
 HORIZONS = (1, 3, 5, 10, 20)
 ROUND_TRIP_COST_BPS = 107.0  # measured: 3bps brokerage + 100bps STT sell + stamp
@@ -70,6 +75,10 @@ def evaluate_bucket(
     *,
     cluster_entries: bool = False,
     conditions: dict | None = None,
+    rsi_min: float = 30.0,
+    rsi_max: float = 70.0,
+    require_macd: bool = True,
+    require_ma: bool = True,
 ) -> dict:
     """Aggregate one signal across many prepared symbol frames.
 
@@ -84,7 +93,12 @@ def evaluate_bucket(
     segment_buckets: dict[tuple[str, int], list[np.ndarray]] = {}
 
     for frame in frames:
-        mask = signal_mask(frame, signal_name)
+        mask = signal_mask_with_filters(
+            frame, signal_name,
+            rsi_min=30.0, rsi_max=70.0,
+            require_macd=True,
+            require_ma=True,
+        )
         if conditions:
             mask = mask & apply_conditions(frame, conditions)
         if cluster_entries:

@@ -34,6 +34,8 @@ def make_symbol_frame(n: int = 120, base_deliv: float = 45.0, seed: int = 1):
         "segment": "EQ",
         "close": close,
         "deliv_pct": deliv,
+        "high": close * 1.01,
+        "low": close * 0.99,
         "volume": rng.integers(50_000, 200_000, n).astype(float),
     })
     return add_features(prepare_frame(df))

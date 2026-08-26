@@ -108,3 +108,10 @@ class DataSource(StrEnum):
 
 
 SCHEMA_VERSION = 1
+
+class SignalName(StrEnum):
+    DZ_HI_UP = "dz_hi_up"
+    DZ_HI_DN = "dz_hi_dn"
+    DZ_LO_UP = "dz_lo_up"
+    SPIKE_70 = "spike_70"
+    STREAK3 = "streak3"
