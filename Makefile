@@ -58,6 +58,11 @@ deflate:
 web:
 	uv run python scripts/run_web.py
 
+suggestions:
+	uv run python scripts/suggestion_manager.py record
+	uv run python scripts/suggestion_manager.py settle
+	uv run python scripts/suggestion_manager.py report
+
 paper:
 	uv run python scripts/paper_track.py snapshot
 	uv run python scripts/paper_track.py settle
@@ -70,6 +75,8 @@ update:
 	uv run python scripts/daily_signals.py
 	uv run python scripts/paper_track.py settle || true
 	uv run python scripts/paper_track.py snapshot
+	uv run python scripts/suggestion_manager.py settle || true
+	uv run python scripts/suggestion_manager.py record || true
 	uv run python scripts/status_report.py
 	@echo "=== update complete ==="
 

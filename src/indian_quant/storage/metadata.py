@@ -102,6 +102,34 @@ class MetadataStore:
                 realized_net_bps REAL,
                 note TEXT
             );
+            CREATE TABLE IF NOT EXISTS daily_suggestions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                suggestion_date TEXT NOT NULL,
+                symbol TEXT NOT NULL,
+                segment TEXT NOT NULL,
+                signal_type TEXT NOT NULL,
+                direction TEXT NOT NULL DEFAULT 'BUY',
+                close_at_signal REAL NOT NULL,
+                deliv_pct REAL,
+                deliv_z REAL,
+                vol_z REAL,
+                entry_zone_low REAL,
+                entry_zone_high REAL,
+                stop_loss REAL,
+                target_price REAL,
+                horizon_days INTEGER NOT NULL,
+                qty_suggested INTEGER NOT NULL,
+                status TEXT NOT NULL DEFAULT 'PENDING',
+                actual_exit_date TEXT,
+                actual_exit_close REAL,
+                actual_return_bps REAL,
+                predicted_return_bps REAL,
+                hit BOOLEAN,
+                note TEXT
+            );
+            CREATE INDEX IF NOT EXISTS idx_sugg_date ON daily_suggestions(suggestion_date);
+            CREATE INDEX IF NOT EXISTS idx_sugg_symbol ON daily_suggestions(symbol);
+            CREATE INDEX IF NOT EXISTS idx_sugg_status ON daily_suggestions(status);
             CREATE INDEX IF NOT EXISTS idx_paper_status ON paper_signals(status, created_at);
             CREATE INDEX IF NOT EXISTS idx_symbol_events_isin ON symbol_events(isin, effective_date);
             CREATE INDEX IF NOT EXISTS idx_jobs_tool ON jobs(tool, started_at);
@@ -247,6 +275,86 @@ class MetadataStore:
                 if settled["avg_net"] is not None else None,
                 "hit_rate": round(settled["hit"], 3) if settled["hit"] is not None else None,
                 "open": open_n}
+
+    def record_daily_suggestion(self, *, suggestion_date: str, symbol: str,
+                                segment: str, signal_type: str,
+                                close_at_signal: float, deliv_pct: float | None,
+                                deliv_z: float | None, vol_z: float | None,
+                                entry_zone_low: float, entry_zone_high: float,
+                                stop_loss: float, target_price: float,
+                                horizon_days: int, qty: int,
+                                predicted_return_bps: float | None = None,
+                                note: str | None = None) -> int:
+        cur = self._con.execute(
+            """INSERT INTO daily_suggestions
+               (suggestion_date, symbol, segment, signal_type, direction,
+                close_at_signal, deliv_pct, deliv_z, vol_z,
+                entry_zone_low, entry_zone_high, stop_loss, target_price,
+                horizon_days, qty_suggested, status,
+                predicted_return_bps, note)
+               VALUES (?, ?, ?, ?, 'BUY', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'PENDING', ?, ?)""",
+            (suggestion_date, symbol.upper(), segment, signal_type,
+             close_at_signal, deliv_pct, deliv_z, vol_z,
+             entry_zone_low, entry_zone_high, stop_loss, target_price,
+             horizon_days, qty, predicted_return_bps, note),
+        )
+        self._con.commit()
+        return int(cur.lastrowid or 0)
+
+    def pending_suggestions(self) -> list[dict]:
+        rows = self._con.execute(
+            "SELECT * FROM daily_suggestions WHERE status='PENDING' ORDER BY suggestion_date DESC"
+        ).fetchall()
+        cols = [d[0] for d in self._con.execute("SELECT * FROM daily_suggestions LIMIT 0").description]
+        return [dict(zip(cols, r, strict=False)) for r in rows]
+
+    def settle_daily_suggestion(self, suggestion_id: int, *, exit_date: str,
+                                 exit_close: float) -> dict:
+        row = self._con.execute(
+            "SELECT * FROM daily_suggestions WHERE id=?", (suggestion_id,)
+        ).fetchone()
+        if not row:
+            raise ValueError(f"suggestion {suggestion_id} not found")
+        col_names = [d[0] for d in self._con.execute("SELECT * FROM daily_suggestions LIMIT 0").description]
+        s = dict(zip(col_names, row, strict=False))
+        gross_bps = (exit_close / s["close_at_signal"] - 1.0) * 10_000
+        net_bps = gross_bps - 107.0  # measured round-trip cost
+        predicted = s.get("predicted_return_bps")
+        hit = (net_bps > 0) if predicted is None else ((net_bps > 0) == (predicted > 0))
+        self._con.execute(
+            """UPDATE daily_suggestions SET status='REALIZED',
+               actual_exit_date=?, actual_exit_close=?,
+               actual_return_bps=?, hit=? WHERE id=?""",
+            (exit_date, exit_close, round(net_bps, 1), int(hit), suggestion_id),
+        )
+        self._con.commit()
+        return {
+            "id": suggestion_id, "symbol": s["symbol"],
+            "actual_net_bps": round(net_bps, 1), "hit": bool(hit),
+        }
+
+    def suggestions_summary(self) -> dict:
+        total = self._con.execute("SELECT COUNT(*) FROM daily_suggestions").fetchone()[0]
+        pending = self._con.execute(
+            "SELECT COUNT(*) FROM daily_suggestions WHERE status='PENDING'").fetchone()[0]
+        realized = self._con.execute(
+            """SELECT COUNT(*), AVG(actual_return_bps),
+               SUM(hit)*1.0/COUNT(*), SUM(CASE WHEN actual_return_bps > 0 THEN 1 ELSE 0 END)*1.0/COUNT(*)
+               FROM daily_suggestions WHERE status='REALIZED'""").fetchone()
+        return {
+            "total": total, "pending": pending,
+            "realized": realized[0] or 0,
+            "avg_realized_net_bps": round(realized[1], 1) if realized[1] is not None else None,
+            "directional_accuracy": round(realized[2], 3) if realized[2] is not None else None,
+            "profitable_pct": round(realized[3], 3) if realized[3] is not None else None,
+        }
+
+    def suggestions_by_date(self, d: str) -> list[dict]:
+        rows = self._con.execute(
+            "SELECT * FROM daily_suggestions WHERE suggestion_date=?", (d,)
+        ).fetchall()
+        cols = [desc[0] for desc in self._con.execute("SELECT * FROM daily_suggestions LIMIT 0").description]
+        return [dict(zip(cols, r, strict=False)) for r in rows]
 
     def record_symbol_event(
         self,

@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block title %}Suggestions & Returns{% endblock %}
+{% block nav_suggestions %}active{% endblock %}
+{% block content %}
+<h1>Daily Suggestions → Realized Returns</h1>
+
+<div class="grid grid-4">
+  <div class="card"><div class="label">Total Suggestions</div><div class="value">{{ summary.total }}</div></div>
+  <div class="card"><div class="label">Pending</div><div class="value warn">{{ summary.pending }}</div></div>
+  <div class="card"><div class="label">Realized</div><div class="value good">{{ summary.realized }}</div></div>
+  <div class="card"><div class="label">Avg Net BPS</div><div class="value {% if summary.avg_realized_net_bps and summary.avg_realized_net_bps > 0 %}good{% elif summary.avg_realized_net_bps and summary.avg_realized_net_bps < 0 %}bad{% else %}neutral{% endif %}">
+    {{ summary.avg_realized_net_bps if summary.avg_realized_net_bps is not none else '—' }}</div></div>
+  <div class="card"><div class="label">Directional Accuracy</div><div class="value">{{ (summary.directional_accuracy * 100)|round(1) if summary.directional_accuracy else '—' }}%</div></div>
+  <div class="card"><div class="label">Profitable %</div><div class="value">{{ (summary.profitable_pct * 100)|round(1) if summary.profitable_pct else '—' }}%</div></div>
+</div>
+
+<h2>Accuracy by Signal Type</h2>
+{% if by_type %}
+<table><tr><th>Signal Type</th><th>Count</th><th>Avg Net BPS</th><th>Hit Rate</th></tr>
+{% for r in by_type %}
+<tr><td class="mono" style="color:var(--green)">{{ r.signal_type }}</td><td>{{ r.n }}</td><td class="{% if r.avg_net > 0 %}good{% else %}bad{% endif %}">{{ '%.1f'|format(r.avg_net) if r.avg_net else '—' }}</td><td>{{ '%.1f%%'|format(r.accuracy) if r.accuracy else '—' }}</td></tr>
+{% endfor %}</table>
+{% else %}<div class="empty">No realized suggestions yet — they settle after {{ 10 }} trading days</div>{% endif %}
+
+<h2>All Suggestions (latest 100)</h2>
+{% if recent %}
+<table style="font-size:12px">
+<tr><th>Date</th><th>Symbol</th><th>Type</th><th>Status</th><th>Close @ Signal</th><th>Z-Score</th><th>Entry Zone</th><th>Stop</th><th>Qty</th><th>Exit Date</th><th>Net BPS</th><th>Hit</th></tr>
+{% for s in recent %}
+<tr>
+<td class="mono" style="white-space:nowrap;font-size:11px">{{ s.suggestion_date }}</td>
+<td class="mono {% if s.status == 'REALIZED' %}{% if s.hit %}good{% else %}bad{% endif %}{% endif %}" style="font-weight:bold">{{ s.symbol }}</td>
+<td class="mono">{{ s.signal_type }}</td>
+<td>{% if s.status == 'REALIZED' %}<span class="badge badge-green">✓</span>{% elif s.status == 'PENDING' %}<span class="badge badge-orange">⏳</span>{% else %}{{ s.status }}{% endif %}</td>
+<td class="mono">₹{{ '%.2f'|format(s.close_at_signal) }}</td>
+<td class="mono">{{ '%.2f'|format(s.deliv_z) if s.deliv_z else '—' }}</td>
+<td class="mono" style="font-size:11px">₹{{ s.entry_zone_low }}–₹{{ s.entry_zone_high }}</td>
+<td class="mono">{{ '%.2f'|format(s.stop_loss) }}</td>
+<td>{{ s.qty_suggested }}</td>
+<td class="mono" style="font-size:11px">{{ s.actual_exit_date or '—' }}</td>
+<td class="{% if s.actual_return_bps and s.actual_return_bps > 0 %}good{% elif s.actual_return_bps and s.actual_return_bps < 0 %}bad{% endif %}">{{ s.actual_return_bps or '—' }}</td>
+<td>{% if s.hit is not none %}{{ '✅' if s.hit else '❌' }}{% else %}—{% endif %}</td>
+</tr>
+{% endfor %}
+</table>
+{% else %}
+<div class="empty">No suggestions recorded yet. Run <code>suggestion_manager.py record</code> to start.</div>
+{% endif %}
+{% endblock %}
