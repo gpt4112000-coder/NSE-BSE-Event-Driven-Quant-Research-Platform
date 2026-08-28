@@ -28,10 +28,14 @@ def scan_symbol(path: Path) -> dict | None:
         raw = pd.read_parquet(path)
     except Exception:
         return None
-    frame = prepare_frame(raw, min_rows=40)
-    if frame is None or "volume" not in frame.columns:
+    if raw.empty:
+        return None
+    frame = prepare_frame(raw, min_rows=min(20, len(raw)))
+    if frame is None or frame.empty or "volume" not in frame.columns:
         return None
     frame = add_features(frame)
+    if frame.empty:
+        return None
     last = frame.iloc[-1]
     prev = frame.iloc[-2] if len(frame) > 1 else last
 

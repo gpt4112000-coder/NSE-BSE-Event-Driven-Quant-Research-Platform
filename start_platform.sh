@@ -112,11 +112,10 @@ else
         exec .venv/bin/python scripts/run_web.py --port 8080
         # exec replaces the script — nothing below runs
     else
-        nohup .venv/bin/python scripts/run_web.py --port 8080 > /tmp/web.log 2>&1 &
-        WEB_PID=$!
+        setsid .venv/bin/uvicorn indian_quant.web.app:app --host 127.0.0.1 --port 8080 --log-level warning < /dev/null > /tmp/web.log 2>&1 &
         sleep 3
-        if kill -0 "$WEB_PID" 2>/dev/null; then
-            echo -e "  ${GREEN}✓ Started (PID $WEB_PID)${NC}"
+        if fuser 8080/tcp >/dev/null 2>&1; then
+            echo -e "  ${GREEN}✓ Started (port 8080)${NC}"
         else
             echo -e "  ${RED}✗ Failed — check /tmp/web.log${NC}"
         fi

@@ -41,6 +41,7 @@ def _scan_today(settings) -> pd.DataFrame:
             "symbol": str(last["symbol"]),
             "segment": str(last["segment"]),
             "close": float(last["close"]),
+            "volume": float(last["volume"]) if "volume" in frame.columns and pd.notna(last.get("volume")) else 0,
             "deliv_pct": float(last["deliv_pct"]) if not pd.isna(last["deliv_pct"]) else None,
             "deliv_z": float(last["deliv_z"]) if not pd.isna(last["deliv_z"]) else None,
             "vol_z": float(last.get("vol_z", 0)) if not pd.isna(last.get("vol_z", np.nan)) else None,
@@ -83,8 +84,9 @@ def cmd_record(settings, *, capital: float, risk_pct: float,
         if r["symbol"] in existing:
             continue
 
-        # Turnover filter
-        turnover = r["close"] * (r.get("volume", 0) or 0)
+        # Turnover filter (volume in lakhs from bhavcopy → convert to rupees)
+        vol = r.get("volume", 0) or 0
+        turnover = r["close"] * vol
         if turnover < min_turnover:
             continue
 
