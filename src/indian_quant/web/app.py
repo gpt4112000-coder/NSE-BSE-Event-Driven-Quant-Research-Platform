@@ -24,10 +24,23 @@ from indian_quant.web.auth import (
     verify_password,
 )
 from indian_quant.web.fast_loader import get_latest_signals_cached
+from indian_quant.web.scheduler import get_scheduler_status, start_scheduler, stop_scheduler
 from indian_quant.web.watchlist_store import WatchlistStore
 
 app = FastAPI(title="NSE-BSE Quant Platform", docs_url=None, redoc_url=None)
-app.add_middleware(SessionMiddleware, secret_key="nse-bse-quant-session-change-in-prod", max_age=86400 * 7)
+app.add_middleware(SessionMiddleware, secret_key="nse-bse-quant-9f8e7d6c5b4a3210-prod", max_age=86400 * 7)
+
+
+@app.on_event("startup")
+def _start_scheduler():
+    import contextlib
+    with contextlib.suppress(Exception):
+        start_scheduler()
+
+
+@app.on_event("shutdown")
+def _stop_scheduler():
+    stop_scheduler()
 templates = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
 
 
@@ -387,3 +400,18 @@ async def api_search_stocks(q: str = "", limit: int = 20):
 @app.get("/healthz")
 async def healthz():
     return {"status": "ok"}
+
+
+@app.get("/api/admin/scheduler")
+async def admin_scheduler_status():
+    return get_scheduler_status()
+
+
+@app.post("/api/admin/refresh-cache")
+async def admin_refresh_cache():
+    import threading
+
+    from indian_quant.web.scheduler import _full_cache_rebuild
+    t = threading.Thread(target=_full_cache_rebuild, daemon=True)
+    t.start()
+    return {"status": "started", "message": "Cache rebuild running in background"}
