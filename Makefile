@@ -77,6 +77,7 @@ update:
 	uv run python scripts/paper_track.py snapshot
 	uv run python scripts/suggestion_manager.py settle || true
 	uv run python scripts/suggestion_manager.py record || true
+	uv run python scripts/watchlist_signal_update.py || true
 	uv run python scripts/status_report.py
 	@echo "=== update complete ==="
 

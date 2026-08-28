@@ -134,6 +134,59 @@ class MetadataStore:
             CREATE INDEX IF NOT EXISTS idx_symbol_events_isin ON symbol_events(isin, effective_date);
             CREATE INDEX IF NOT EXISTS idx_jobs_tool ON jobs(tool, started_at);
             CREATE INDEX IF NOT EXISTS idx_runs_kind ON runs(kind, started_at);
+
+            CREATE TABLE IF NOT EXISTS users (
+                user_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                username TEXT NOT NULL UNIQUE,
+                email TEXT NOT NULL UNIQUE,
+                password_hash TEXT NOT NULL,
+                display_name TEXT NOT NULL DEFAULT '',
+                created_at TEXT NOT NULL,
+                last_login TEXT,
+                is_active BOOLEAN NOT NULL DEFAULT 1
+            );
+            CREATE INDEX IF NOT EXISTS idx_users_username ON users(username);
+
+            CREATE TABLE IF NOT EXISTS watchlists (
+                watchlist_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                symbol TEXT NOT NULL,
+                exchange TEXT NOT NULL DEFAULT 'NSE',
+                added_at TEXT NOT NULL,
+                notes TEXT DEFAULT '',
+                FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE,
+                UNIQUE(user_id, symbol)
+            );
+            CREATE INDEX IF NOT EXISTS idx_watchlists_user ON watchlists(user_id);
+
+            CREATE TABLE IF NOT EXISTS watchlist_signals (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                watchlist_id INTEGER NOT NULL,
+                user_id INTEGER NOT NULL,
+                symbol TEXT NOT NULL,
+                signal_date TEXT,
+                signal_type TEXT,
+                close REAL,
+                deliv_pct REAL,
+                deliv_z REAL,
+                vol_z REAL,
+                ret_1d REAL,
+                rsi REAL,
+                macd REAL,
+                macd_signal REAL,
+                sma_20 REAL,
+                sma_50 REAL,
+                atr_14 REAL,
+                entry_zone_low REAL,
+                entry_zone_high REAL,
+                stop_loss REAL,
+                target_price REAL,
+                updated_at TEXT NOT NULL,
+                FOREIGN KEY (watchlist_id) REFERENCES watchlists(watchlist_id) ON DELETE CASCADE,
+                FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE
+            );
+            CREATE INDEX IF NOT EXISTS idx_ws_signals_user ON watchlist_signals(user_id);
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_ws_signals_unique ON watchlist_signals(watchlist_id);
             """
         )
         self._con.commit()

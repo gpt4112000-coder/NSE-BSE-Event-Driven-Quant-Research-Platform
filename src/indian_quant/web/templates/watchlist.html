@@ -1,0 +1,105 @@
+{% extends "base.html" %}
+{% block title %}My Watchlist{% endblock %}
+{% block nav_watchlist %}active{% endblock %}
+{% block content %}
+<h1>My Watchlist <span style="font-size:14px;color:var(--dim);font-weight:normal">({{ stocks|length }} stocks)</span></h1>
+
+<div style="margin:20px 0;display:flex;gap:12px;align-items:center">
+  <input id="search-input" type="text" placeholder="Search NSE stocks..." autocomplete="off"
+    style="flex:1;max-width:400px;padding:10px 14px;background:var(--bg2);border:1px solid var(--line);border-radius:8px;color:var(--txt);font-size:14px;outline:none">
+  <div id="search-results" style="position:absolute;margin-top:40px;background:var(--panel);border:1px solid var(--line);border-radius:8px;display:none;max-height:300px;overflow-y:auto;z-index:100;width:400px"></div>
+  <button onclick="addSelected()" id="add-btn" style="padding:10px 20px;background:var(--green);color:#000;border:none;border-radius:8px;font-size:13px;font-weight:bold;cursor:pointer;opacity:0.5" disabled>+ Add</button>
+</div>
+
+{% if stocks %}
+<table id="watchlist-table">
+<tr>
+  <th>Symbol</th><th>Segment</th><th>Close</th><th>Deliv Z</th><th>Signal</th><th>RSI</th><th>SMA</th><th>Updated</th><th></th>
+</tr>
+{% for s in stocks %}
+{% set sig = signal_map.get(s.symbol, {}) %}
+<tr>
+  <td><a href="/stock/{{ s.symbol }}" class="mono good" style="font-weight:bold;font-size:14px">{{ s.symbol }}</a></td>
+  <td style="color:var(--dim)">{{ sig.segment or 'EQ' }}</td>
+  <td class="mono">{% if sig.close %}₹{{ '%.2f'|format(sig.close) }}{% else %}—{% endif %}</td>
+  <td class="mono">{% if sig.deliv_z is not none %}<span class="{% if sig.deliv_z >= 2 %}good{% elif sig.deliv_z <= -2 %}bad{% else %}neutral{% endif %}">{{ '%.2f'|format(sig.deliv_z) }}</span>{% else %}—{% endif %}</td>
+  <td>{% if sig.signal_type == 'dz_hi_up' %}<span class="badge badge-green">BUY</span>
+      {% elif sig.signal_type == 'dz_hi_dn' %}<span class="badge badge-red">AVOID</span>
+      {% else %}<span style="color:var(--faint)">—</span>{% endif %}</td>
+  <td class="mono">{% if sig.rsi is not none %}{{ '%.0f'|format(sig.rsi) }}{% else %}—{% endif %}</td>
+  <td class="mono" style="font-size:12px">{% if sig.sma_20 is not none and sig.close %}{% if sig.close > sig.sma_20 %}<span class="good">Above</span>{% else %}<span class="bad">Below</span>{% endif %}{% else %}—{% endif %}</td>
+  <td style="color:var(--faint);font-size:12px">{% if sig.updated_at %}{{ sig.updated_at[:10] }}{% else %}—{% endif %}</td>
+  <td><a href="/stock/{{ s.symbol }}" style="font-size:12px;color:var(--blue)">Analyze →</a>
+    <button onclick="removeStock('{{ s.symbol }}')" style="margin-left:8px;font-size:11px;color:var(--red);background:none;border:none;cursor:pointer">✕</button></td>
+</tr>
+{% endfor %}
+</table>
+{% else %}
+<div class="empty" style="margin-top:40px">
+  <p style="font-size:16px;margin-bottom:8px">Your watchlist is empty</p>
+  <p>Search for stocks above and click "+ Add" to start tracking them</p>
+</div>
+{% endif %}
+
+<script>
+let selectedSymbol = null;
+const searchInput = document.getElementById('search-input');
+const searchResults = document.getElementById('search-results');
+const addBtn = document.getElementById('add-btn');
+let debounce = null;
+
+searchInput.addEventListener('input', () => {
+  clearTimeout(debounce);
+  const q = searchInput.value.trim();
+  if (q.length < 1) { searchResults.style.display = 'none'; return; }
+  debounce = setTimeout(() => {
+    fetch('/api/search?q=' + encodeURIComponent(q) + '&limit=15')
+      .then(r => r.json())
+      .then(data => {
+        if (data.length === 0) { searchResults.style.display = 'none'; return; }
+        searchResults.innerHTML = data.map(s =>
+          `<div onclick="selectStock('${s.symbol}')" style="padding:10px 14px;cursor:pointer;border-bottom:1px solid var(--line);display:flex;justify-content:space-between">
+            <span class="mono good">${s.symbol}</span>
+            <span style="color:var(--faint);font-size:12px">${s.exchange} · ${s.segment}</span>
+          </div>`
+        ).join('');
+        searchResults.style.display = 'block';
+      });
+  }, 200);
+});
+
+function selectStock(symbol) {
+  selectedSymbol = symbol;
+  searchInput.value = symbol;
+  searchResults.style.display = 'none';
+  addBtn.disabled = false;
+  addBtn.style.opacity = '1';
+}
+
+function addSelected() {
+  if (!selectedSymbol) return;
+  fetch('/api/watchlist/add', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({symbol: selectedSymbol})
+  }).then(r => r.json()).then(d => {
+    if (d.ok) location.reload();
+    else alert(d.error || 'Failed to add');
+  });
+}
+
+function removeStock(symbol) {
+  if (!confirm('Remove ' + symbol + ' from watchlist?')) return;
+  fetch('/api/watchlist/remove', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({symbol: symbol})
+  }).then(r => r.json()).then(d => { if (d.ok) location.reload(); });
+}
+
+document.addEventListener('click', (e) => {
+  if (!searchInput.contains(e.target) && !searchResults.contains(e.target))
+    searchResults.style.display = 'none';
+});
+</script>
+{% endblock %}
