@@ -1,12 +1,14 @@
-"""Pre-compute and cache all delivery signals in SQLite.
+"""Pre-compute and cache all delivery signals in PostgreSQL + Redis.
 
-Scans ALL NSE + BSE parquet files once, computes features, writes to
-cached_signals table. Dashboard/Signals pages read from this table
-instead of scanning 3,755+ parquet files on every request.
+Architecture:
+    1. Scan ALL NSE + BSE parquet files → compute features
+    2. Write to PostgreSQL (persistent store)
+    3. Write to Redis (hot cache, TTL=1h)
+    4. Dashboard/Signals read from Redis → PostgreSQL fallback
 
 Usage:
     python scripts/cache_signals.py              # full rebuild
-    python scripts/cache_signals.py --incremental  # only new dates
+    python scripts/cache_signals.py --warm-redis  # only refresh Redis from PG
 
 Run daily after market close via APScheduler or cron.
 """
@@ -17,52 +19,21 @@ import argparse
 import json
 import sys
 import time
+from datetime import UTC, datetime
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 import pandas as pd
-import sqlalchemy as sa
 
 from indian_quant.config import load_settings
 from indian_quant.features.delivery import add_features, prepare_frame
-
-
-def get_engine(db_path: str):
-    return sa.create_engine(f"sqlite:///{db_path}")
-
-
-def ensure_table(engine):
-    meta = sa.MetaData()
-    sa.Table(
-        "cached_signals", meta,
-        sa.Column("symbol", sa.String, primary_key=True),
-        sa.Column("exchange", sa.String, nullable=False),
-        sa.Column("signal_date", sa.String),
-        sa.Column("segment", sa.String),
-        sa.Column("close", sa.Float),
-        sa.Column("prev_close", sa.Float),
-        sa.Column("ret_1d_pct", sa.Float),
-        sa.Column("deliv_pct", sa.Float),
-        sa.Column("deliv_z", sa.Float),
-        sa.Column("vol_z", sa.Float),
-        sa.Column("rsi", sa.Float),
-        sa.Column("macd", sa.Float),
-        sa.Column("macd_signal", sa.Float),
-        sa.Column("sma_20", sa.Float),
-        sa.Column("sma_50", sa.Float),
-        sa.Column("atr_14", sa.Float),
-        sa.Column("hi_streak", sa.Integer),
-        sa.Column("signal_type", sa.String),
-        sa.Column("entry_zone_low", sa.Float),
-        sa.Column("entry_zone_high", sa.Float),
-        sa.Column("stop_loss", sa.Float),
-        sa.Column("target_price", sa.Float),
-        sa.Column("volume", sa.Float),
-        sa.Column("cached_at", sa.String),
-        sa.Column("raw_json", sa.String),
-    )
-    meta.create_all(engine)
+from indian_quant.web.prod_config import (
+    REDIS_TTL,
+    ensure_pg_schema,
+    get_pg_engine,
+    get_redis_client,
+)
 
 
 def compute_signal_for_stock(parquet_path: Path, symbol: str, exchange: str) -> dict | None:
@@ -125,32 +96,93 @@ def compute_signal_for_stock(parquet_path: Path, symbol: str, exchange: str) -> 
         return None
 
 
+def write_to_postgres(signals: list[dict]) -> None:
+    """Write all signals to PostgreSQL (full replace)."""
+    import sqlalchemy as sa
+
+    engine = get_pg_engine()
+    ensure_pg_schema()
+
+    with engine.begin() as conn:
+        conn.execute(sa.text("TRUNCATE TABLE cached_signals"))
+        if signals:
+            df = pd.DataFrame(signals)
+            df["cached_at"] = datetime.now(UTC).isoformat()
+            df.to_sql("cached_signals", engine, if_exists="append", index=False)
+
+
+def write_to_redis(signals: list[dict]) -> None:
+    """Write all signals to Redis as hot cache."""
+    r = get_redis_client()
+    pipe = r.pipeline()
+
+    # Clear old cache
+    pipe.delete("signals:all")
+    pipe.delete("signals:buys")
+    pipe.delete("signals:avoids")
+    pipe.delete("signals:by_symbol")
+
+    buys = [s for s in signals if s.get("signal_type") == "dz_hi_up"]
+    avoids = [s for s in signals if s.get("signal_type") == "dz_hi_dn"]
+
+    # Store as JSON
+    pipe.set("signals:all", json.dumps(signals, default=str), ex=REDIS_TTL)
+    pipe.set("signals:buys", json.dumps(buys, default=str), ex=REDIS_TTL)
+    pipe.set("signals:avoids", json.dumps(avoids, default=str), ex=REDIS_TTL)
+    pipe.set("signals:date", signals[0]["signal_date"] if signals else "", ex=REDIS_TTL)
+    pipe.set("signals:count", str(len(signals)), ex=REDIS_TTL)
+
+    # Store per-symbol lookup
+    for s in signals:
+        pipe.hset("signals:by_symbol", s["symbol"], json.dumps(s, default=str))
+    pipe.expire("signals:by_symbol", REDIS_TTL)
+
+    pipe.execute()
+
+
+def warm_redis_from_pg() -> int:
+    """Refresh Redis cache from PostgreSQL (fast, no parquet scan)."""
+
+    engine = get_pg_engine()
+
+    df = pd.read_sql("SELECT * FROM cached_signals", engine)
+    if df.empty:
+        return 0
+
+    signals = df.to_dict(orient="records")
+    write_to_redis(signals)
+    return len(signals)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Cache delivery signals")
-    parser.add_argument("--incremental", action="store_true",
-                        help="Only update stocks with stale data")
-    parser.add_argument("--config", default=None)
+    parser.add_argument("--warm-redis", action="store_true",
+                        help="Only refresh Redis from PostgreSQL (fast)")
     parser.parse_args()
 
-    settings = load_settings()
-    db_path = str(Path(settings.storage.metadata_dsn.removeprefix("sqlite:///")))
-    engine = get_engine(db_path)
-    ensure_table(engine)
+    if warm_redis_from_pg.__code__.co_argcount == 0:
+        pass  # always available
 
+    args = sys.argv[1:]
+    if "--warm-redis" in args:
+        t0 = time.time()
+        count = warm_redis_from_pg()
+        print(json.dumps({"action": "warm_redis", "symbols": count, "time": f"{time.time()-t0:.1f}s"}))
+        return 0
+
+    settings = load_settings()
     nse_dir = settings.normalized_dir / "delivery" / "NSE"
     bse_dir = settings.normalized_dir / "delivery" / "BSE"
 
     t0 = time.time()
     signals = []
 
-    # Scan NSE
     if nse_dir.exists():
         for p in sorted(nse_dir.glob("*.parquet")):
             sig = compute_signal_for_stock(p, p.stem, "NSE")
             if sig:
                 signals.append(sig)
 
-    # Scan BSE
     if bse_dir.exists():
         for p in sorted(bse_dir.glob("*.parquet")):
             sig = compute_signal_for_stock(p, p.stem, "BSE")
@@ -159,11 +191,9 @@ def main() -> int:
 
     elapsed_scan = time.time() - t0
 
-    # Write to cache
     if signals:
-        df = pd.DataFrame(signals)
-        df["cached_at"] = pd.Timestamp.now(tz="UTC").isoformat()
-        df.to_sql("cached_signals", engine, if_exists="replace", index=False)
+        write_to_postgres(signals)
+        write_to_redis(signals)
 
     elapsed_total = time.time() - t0
     buys = sum(1 for s in signals if s.get("signal_type") == "dz_hi_up")
@@ -175,7 +205,7 @@ def main() -> int:
         "avoids": avoids,
         "scan_time": f"{elapsed_scan:.1f}s",
         "total_time": f"{elapsed_total:.1f}s",
-        "db_path": db_path,
+        "store": "postgresql+redis",
     }, indent=2))
     return 0
 

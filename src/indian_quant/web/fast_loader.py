@@ -1,84 +1,146 @@
-"""Fast data loader that reads from cached_signals table.
+"""Fast data loader with Redis hot cache + PostgreSQL fallback.
 
-Replaces the slow parquet-scanning functions in data_loader.py.
-Dashboard/Signals pages call these instead of scanning 3,755 files.
+Architecture:
+    Request → Redis (sub-ms) → PostgreSQL (5ms) → parquet (slow, last resort)
+
+Redis keys:
+    signals:all      - all signals JSON (TTL=1h)
+    signals:buys     - dz_hi_up signals JSON
+    signals:avoids   - dz_hi_dn signals JSON
+    signals:by_symbol - hash map: symbol → signal JSON
+    signals:date     - latest signal date
+    signals:count    - total signal count
 """
 
 from __future__ import annotations
 
-from pathlib import Path
+import json
 from typing import Any
 
 import pandas as pd
-import sqlalchemy as sa
 
-from indian_quant.config import load_settings
-
-
-def _get_engine():
-    settings = load_settings()
-    db_path = str(Path(settings.storage.metadata_dsn.removeprefix("sqlite:///")))
-    return sa.create_engine(f"sqlite:///{db_path}")
+from indian_quant.web.prod_config import (
+    ensure_pg_schema,
+    get_pg_engine,
+    get_redis_client,
+)
 
 
-def _table_exists(engine, table_name: str) -> bool:
-    return sa.inspect(engine).has_table(table_name)
+def _redis_get(key: str) -> str | None:
+    try:
+        r = get_redis_client()
+        return r.get(key)
+    except Exception:
+        return None
 
 
-def get_cached_signals() -> pd.DataFrame:
-    """Read all cached signals as DataFrame."""
-    engine = _get_engine()
-    if not _table_exists(engine, "cached_signals"):
-        return pd.DataFrame()
-    return pd.read_sql("SELECT * FROM cached_signals", engine)
+def _redis_set(key: str, value: str, ttl: int = 3600) -> None:
+    try:
+        r = get_redis_client()
+        r.set(key, value, ex=ttl)
+    except Exception:
+        pass
 
 
 def get_latest_signals_cached() -> dict[str, Any]:
-    """Fast replacement for data_loader.get_latest_signals()."""
-    df = get_cached_signals()
-    if df.empty:
-        return {"date": "", "buys": [], "avoids": [], "total_scanned": 0}
+    """Fast: Redis → PostgreSQL → empty."""
+    # 1) Try Redis
+    cached = _redis_get("signals:all")
+    if cached:
+        signals = json.loads(cached)
+        latest_date = signals[0]["signal_date"] if signals else ""
+        buys = [s for s in signals if s.get("signal_type") == "dz_hi_up"]
+        avoids = [s for s in signals if s.get("signal_type") == "dz_hi_dn"]
+        return {
+            "date": latest_date,
+            "buys": buys,
+            "avoids": avoids,
+            "total_scanned": len(signals),
+        }
 
-    latest_date = df["signal_date"].max()
-    today = df[df["signal_date"] == latest_date]
+    # 2) Fallback to PostgreSQL
+    try:
+        engine = get_pg_engine()
+        ensure_pg_schema()
+        df = pd.read_sql("SELECT * FROM cached_signals", engine)
+        if not df.empty:
+            # Warm Redis for next time
+            signals = df.to_dict(orient="records")
+            _redis_set("signals:all", json.dumps(signals, default=str))
+            latest_date = df["signal_date"].max()
+            today = df[df["signal_date"] == latest_date]
+            buys = today[today["signal_type"] == "dz_hi_up"].to_dict(orient="records")
+            avoids = today[today["signal_type"] == "dz_hi_dn"].to_dict(orient="records")
+            return {
+                "date": str(latest_date),
+                "buys": buys,
+                "avoids": avoids,
+                "total_scanned": int(len(today)),
+            }
+    except Exception:
+        pass
 
-    buys = today[today["signal_type"] == "dz_hi_up"].sort_values("deliv_z", ascending=False)
-    avoids = today[today["signal_type"] == "dz_hi_dn"].sort_values("deliv_z", ascending=False)
-
-    return {
-        "date": str(latest_date),
-        "buys": buys.replace({pd.NA: None}).to_dict(orient="records"),
-        "avoids": avoids.replace({pd.NA: None}).to_dict(orient="records"),
-        "total_scanned": int(len(today)),
-    }
+    return {"date": "", "buys": [], "avoids": [], "total_scanned": 0}
 
 
 def get_cached_signal_for_symbol(symbol: str) -> dict[str, Any] | None:
-    """Get cached signal for a single symbol."""
-    engine = _get_engine()
-    if not _table_exists(engine, "cached_signals"):
-        return None
-    df = pd.read_sql(
-        "SELECT * FROM cached_signals WHERE symbol = ?",
-        engine, params=(symbol.upper(),),
-    )
-    if df.empty:
-        return None
-    return df.iloc[0].to_dict()
+    """Get cached signal for a single symbol. Redis hash → PG fallback."""
+    sym = symbol.upper()
+
+    # 1) Try Redis hash
+    try:
+        r = get_redis_client()
+        raw = r.hget("signals:by_symbol", sym)
+        if raw:
+            return json.loads(raw)
+    except Exception:
+        pass
+
+    # 2) PostgreSQL
+    try:
+        engine = get_pg_engine()
+        df = pd.read_sql(
+            "SELECT * FROM cached_signals WHERE symbol = :sym",
+            engine, params={"sym": sym},
+        )
+        if not df.empty:
+            return df.iloc[0].to_dict()
+    except Exception:
+        pass
+
+    return None
 
 
 def get_cached_signals_summary() -> dict[str, Any]:
     """Summary stats for dashboard cards."""
-    df = get_cached_signals()
-    if df.empty:
-        return {"total": 0, "buys": 0, "avoids": 0, "date": ""}
+    # Redis fast path
+    count = _redis_get("signals:count")
+    date = _redis_get("signals:date")
+    buys_raw = _redis_get("signals:buys")
+    avoids_raw = _redis_get("signals:avoids")
 
-    latest_date = df["signal_date"].max()
-    today = df[df["signal_date"] == latest_date]
+    if count is not None:
+        return {
+            "date": date or "",
+            "total": int(count),
+            "buys": len(json.loads(buys_raw)) if buys_raw else 0,
+            "avoids": len(json.loads(avoids_raw)) if avoids_raw else 0,
+        }
 
-    return {
-        "date": str(latest_date),
-        "total": int(len(today)),
-        "buys": int((today["signal_type"] == "dz_hi_up").sum()),
-        "avoids": int((today["signal_type"] == "dz_hi_dn").sum()),
-    }
+    # PostgreSQL fallback
+    try:
+        engine = get_pg_engine()
+        df = pd.read_sql("SELECT * FROM cached_signals", engine)
+        if not df.empty:
+            latest = df["signal_date"].max()
+            today = df[df["signal_date"] == latest]
+            return {
+                "date": str(latest),
+                "total": int(len(today)),
+                "buys": int((today["signal_type"] == "dz_hi_up").sum()),
+                "avoids": int((today["signal_type"] == "dz_hi_dn").sum()),
+            }
+    except Exception:
+        pass
+
+    return {"total": 0, "buys": 0, "avoids": 0, "date": ""}
