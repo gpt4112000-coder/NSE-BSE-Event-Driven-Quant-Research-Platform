@@ -1,9 +1,11 @@
 """Build the research universe registry from exchange evidence.
 
-Primary source: recent NSE CM UDiFF bhavcopies already sitting in the raw
-store - every traded symbol, its series (EQ/SM/ST/...) and ISIN. This is
-the complete tradable universe and cannot be bot-blocked because it rides
-the same CDN as ingestion.
+Primary sources:
+    NSE: CM UDiFF bhavcopies in raw store (all cached files, not just 5)
+    BSE: bhavcopy via bseindia library (bypasses CDN block)
+
+Every traded symbol, its series (EQ/SM/ST/... for NSE; B/A/X/MT/... for BSE)
+and ISIN. This is the complete tradable universe.
 
 Optional enrichment: MCP index/SME lists when reachable.
 
@@ -20,6 +22,7 @@ import io
 import json
 import sys
 import zipfile
+from datetime import date, timedelta
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
@@ -28,14 +31,23 @@ from indian_quant.config import load_settings
 from indian_quant.schemas import Exchange, InstrumentIdentity, SecurityType, Segment
 from indian_quant.storage import MetadataStore
 
-SERIES_SEGMENT = {"EQ": "EQ", "BE": "EQ", "BZ": "EQ", "SM": "SME", "ST": "SME"}
+# NSE series mapping
+NSE_SERIES_SEGMENT = {"EQ": "EQ", "BE": "EQ", "BZ": "EQ", "SM": "SME", "ST": "SME"}
+
+# BSE series mapping
+BSE_SERIES_SEGMENT = {
+    "B": "EQ", "A": "EQ", "X": "EQ", "XT": "EQ",
+    "G": "EQ", "P": "EQ", "IF": "EQ", "E": "EQ", "Z": "EQ", "R": "EQ",
+    "MT": "SME", "M": "SME", "T": "SME", "MS": "SME",
+}
 
 
-def scan_from_bhavcopies(settings, lookback_files: int = 5) -> dict[str, dict]:
-    """Latest series+ISIN per symbol across the newest N CM bhavcopy zips."""
+def scan_nse_bhavcopies(settings) -> dict[str, dict]:
+    """Scan ALL NSE bhavcopy zips in raw store (not just recent N)."""
     raw_dir = settings.data_root / "raw" / "nse" / "bhavcopy_cm_udiff"
-    zips = sorted(raw_dir.rglob("*.zip"), key=lambda p: p.stat().st_mtime,
-                  reverse=True)[:lookback_files]
+    if not raw_dir.exists():
+        return {}
+    zips = sorted(raw_dir.rglob("*.zip"), key=lambda p: p.stat().st_mtime, reverse=True)
     universe: dict[str, dict] = {}
     scanned = 0
     for zp in zips:
@@ -46,11 +58,12 @@ def scan_from_bhavcopies(settings, lookback_files: int = 5) -> dict[str, dict]:
                 for row in reader:
                     symbol = (row.get("TckrSymb") or "").strip().upper()
                     series = (row.get("SctySrs") or "").strip()
-                    segment = SERIES_SEGMENT.get(series)
+                    segment = NSE_SERIES_SEGMENT.get(series)
                     if not symbol or not segment:
                         continue
                     entry = universe.setdefault(symbol, {
                         "symbol": symbol,
+                        "exchange": "NSE",
                         "segment": segment,
                         "series": series,
                         "isin": (row.get("ISIN") or "").strip() or None,
@@ -63,7 +76,62 @@ def scan_from_bhavcopies(settings, lookback_files: int = 5) -> dict[str, dict]:
         except (OSError, KeyError, zipfile.BadZipFile):
             continue
         scanned += 1
-    print(f"scanned {scanned} bhavcopy files")
+    print(f"NSE: scanned {scanned} bhavcopy files -> {len(universe)} symbols")
+    return universe
+
+
+def scan_bse_bhavcopies(settings) -> dict[str, dict]:
+    """Scan BSE bhavcopy via bseindia library for recent trading days."""
+    try:
+        from bseindia import equity as bse_equity
+    except ImportError:
+        print("BSE: bseindia library not installed, skipping")
+        return {}
+
+    universe: dict[str, dict] = {}
+    today = date.today()
+    # Scan last 5 trading days to build BSE universe
+    dates_to_check = []
+    d = today
+    attempts = 0
+    while len(dates_to_check) < 5 and attempts < 14:
+        if d.weekday() < 5:
+            dates_to_check.append(d)
+        d = d - timedelta(days=1)
+        attempts += 1
+
+    for day in dates_to_check:
+        try:
+            ddmmYYYY = day.strftime("%d-%m-%Y")
+            df = bse_equity.equity_bhav_copy(trade_date=ddmmYYYY)
+            if df is None or len(df) == 0:
+                continue
+            count = 0
+            for _, row in df.iterrows():
+                series = str(row.get("SctySrs", "")).strip()
+                segment = BSE_SERIES_SEGMENT.get(series)
+                if segment is None:
+                    continue
+                symbol = str(row.get("TckrSymb", "")).strip().upper()
+                if not symbol:
+                    continue
+                isin = str(row.get("ISIN", "")).strip() or None
+                entry = universe.setdefault(symbol, {
+                    "symbol": symbol,
+                    "exchange": "BSE",
+                    "segment": segment,
+                    "series": series,
+                    "isin": isin,
+                    "source": f"bse_bhavcopy:{day.isoformat()}",
+                })
+                if isin and not entry.get("isin"):
+                    entry["isin"] = isin
+                count += 1
+            print(f"  BSE {day.isoformat()}: {count} symbols")
+        except Exception as exc:
+            print(f"  BSE {day.isoformat()}: skipped ({str(exc)[:60]})")
+
+    print(f"BSE: {len(universe)} unique symbols")
     return universe
 
 
@@ -104,9 +172,10 @@ def register_instruments(settings, universe: dict[str, dict]) -> int:
     count = 0
     for item in universe.values():
         segment = Segment.SME if item["segment"] == "SME" else Segment.EQ
+        exchange_val = Exchange.BSE if item["exchange"] == "BSE" else Exchange.NSE
         identity = InstrumentIdentity(
-            instrument_id=f"NSE_{segment.value}|{item['symbol']}",
-            exchange=Exchange.NSE,
+            instrument_id=f"{item['exchange']}_{segment.value}|{item['symbol']}",
+            exchange=exchange_val,
             segment=segment,
             symbol=item["symbol"],
             isin=item.get("isin") or None,
@@ -130,15 +199,33 @@ def register_instruments(settings, universe: dict[str, dict]) -> int:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Build universe registry")
-    parser.add_argument("--lookback-files", type=int, default=5)
     parser.add_argument("--no-mcp", action="store_true")
+    parser.add_argument("--no-bse", action="store_true",
+                        help="Skip BSE ingestion")
     parser.add_argument("--config", default=None)
     args = parser.parse_args()
 
     settings = load_settings(args.config)
-    universe = scan_from_bhavcopies(settings, args.lookback_files)
+
+    # Scan NSE (all cached bhavcopy files)
+    universe = scan_nse_bhavcopies(settings)
     if not universe:
-        print("no bhavcopy raw files found - run scripts/ingest.py first")
+        print("no NSE bhavcopy raw files found - run scripts/bulk_ingest.py first")
+
+    # Scan BSE (via bseindia library)
+    if not args.no_bse:
+        bse_universe = scan_bse_bhavcopies(settings)
+        # Merge BSE into universe (NSE takes precedence for same symbol)
+        for sym, info in bse_universe.items():
+            if sym not in universe:
+                universe[sym] = info
+            elif universe[sym].get("exchange") == "NSE":
+                # Keep NSE entry but mark as dual-listed
+                universe[sym]["dual_listed"] = True
+                universe[sym]["bse_isin"] = info.get("isin")
+
+    if not universe:
+        print("no data found")
         return 1
 
     if not args.no_mcp:
@@ -146,6 +233,9 @@ def main() -> int:
 
     counts = {
         "total": len(universe),
+        "nse": sum(1 for u in universe.values() if u.get("exchange") == "NSE"),
+        "bse_only": sum(1 for u in universe.values() if u.get("exchange") == "BSE"),
+        "dual_listed": sum(1 for u in universe.values() if u.get("dual_listed")),
         "eq": sum(1 for u in universe.values() if u["segment"] == "EQ"),
         "sme": sum(1 for u in universe.values() if u["segment"] == "SME"),
         "with_isin": sum(1 for u in universe.values() if u.get("isin")),

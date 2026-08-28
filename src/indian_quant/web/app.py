@@ -308,10 +308,19 @@ async def api_search_stocks(q: str = "", limit: int = 20):
     seen = set()
     matches = []
 
-    # 1) Delivery parquet files (have data)
-    dl_dir = settings.normalized_dir / "delivery" / "NSE"
-    if dl_dir.exists():
-        for p in sorted(dl_dir.glob("*.parquet")):
+    nse_dl_dir = settings.normalized_dir / "delivery" / "NSE"
+    bse_dl_dir = settings.normalized_dir / "delivery" / "BSE"
+
+    def has_delivery_data(sym: str) -> bool:
+        return (
+            (nse_dl_dir / f"{sym}.parquet").exists() if nse_dl_dir.exists() else False
+        ) or (
+            (bse_dl_dir / f"{sym}.parquet").exists() if bse_dl_dir.exists() else False
+        )
+
+    # 1) NSE delivery parquet files
+    if nse_dl_dir.exists():
+        for p in sorted(nse_dl_dir.glob("*.parquet")):
             sym = p.stem
             if q in sym and sym not in seen:
                 matches.append({"symbol": sym, "exchange": "NSE", "segment": "EQ", "has_data": True})
@@ -319,7 +328,17 @@ async def api_search_stocks(q: str = "", limit: int = 20):
             if len(matches) >= limit:
                 break
 
-    # 2) Universe registry (broader set, may not have data yet)
+    # 2) BSE delivery parquet files
+    if bse_dl_dir.exists() and len(matches) < limit:
+        for p in sorted(bse_dl_dir.glob("*.parquet")):
+            sym = p.stem
+            if q in sym and sym not in seen:
+                matches.append({"symbol": sym, "exchange": "BSE", "segment": "EQ", "has_data": True})
+                seen.add(sym)
+            if len(matches) >= limit:
+                break
+
+    # 3) Universe registry (broader set, may not have data yet)
     reg_path = settings.data_root / "universe" / "registry.json"
     if reg_path.exists() and len(matches) < limit:
         try:
@@ -327,25 +346,17 @@ async def api_search_stocks(q: str = "", limit: int = 20):
             reg = _json.loads(reg_path.read_text())
             for sym, info in reg.get("symbols", {}).items():
                 if q in sym and sym not in seen:
-                    has_data = (dl_dir / f"{sym}.parquet").exists() if dl_dir.exists() else False
-                    matches.append({"symbol": sym, "exchange": "NSE",
-                                    "segment": info.get("segment", "EQ"), "has_data": has_data})
+                    matches.append({
+                        "symbol": sym,
+                        "exchange": info.get("exchange", "NSE"),
+                        "segment": info.get("segment", "EQ"),
+                        "has_data": has_delivery_data(sym),
+                    })
                     seen.add(sym)
                 if len(matches) >= limit:
                     break
         except Exception:
             pass
-
-    # 3) BSE delivery files
-    bse_dir = settings.normalized_dir / "delivery" / "BSE"
-    if bse_dir.exists() and len(matches) < limit:
-        for p in sorted(bse_dir.glob("*.parquet")):
-            sym = p.stem
-            if q in sym and sym not in seen:
-                matches.append({"symbol": sym, "exchange": "BSE", "segment": "EQ", "has_data": True})
-                seen.add(sym)
-            if len(matches) >= limit:
-                break
 
     # 4) Instruments table (database)
     if len(matches) < limit:
@@ -361,8 +372,10 @@ async def api_search_stocks(q: str = "", limit: int = 20):
                 con.close()
                 for sym, exch, seg in rows:
                     if sym not in seen:
-                        has_data = (dl_dir / f"{sym}.parquet").exists() if dl_dir.exists() else False
-                        matches.append({"symbol": sym, "exchange": exch, "segment": seg, "has_data": has_data})
+                        matches.append({
+                            "symbol": sym, "exchange": exch, "segment": seg,
+                            "has_data": has_delivery_data(sym),
+                        })
                         seen.add(sym)
         except Exception:
             pass

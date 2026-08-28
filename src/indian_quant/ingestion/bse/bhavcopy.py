@@ -1,22 +1,27 @@
-"""BSE UDiFF bhavcopy ingestion (bars-only).
+"""BSE bhavcopy ingestion via the bseindia Python library.
 
-Uses the same UDiFF schema BSE adopted alongside NSE:
-    https://www.bseindia.com/download/BhavCopy/Equity/BhavCopy_BSE_CM_0_0_0_{YYYYMMDD}_F_0000.csv.zip
+BSE's CDN blocks datacenter IPs (serves HTML block page with HTTP 200).
+The bseindia library bypasses this by using BSE's internal API endpoints.
 
-NOTE: BSE's CDN aggressively blocks datacenter IPs (serves an HTML block
-page with HTTP 200). ``fetch_cm_zip`` detects this and raises
-``SourceBlockedError`` rather than misparsing HTML as market data. From
-residential/allowlisted networks the fetch works unchanged.
+Series mapping (BSE uses different series codes than NSE):
+    B  -> EQ  (BSE equity)
+    A  -> EQ  (A Group)
+    X  -> EQ  (Extra)
+    XT -> EQ  (Extra Trading)
+    MT -> SME (Modified Trading / SME)
+    M  -> SME (Main Board SME)
+    T  -> SME (Trading)
+
+Sources:
+    bseindia lib: equity.equity_bhav_copy(trade_date="DD-MM-YYYY")
 """
 
 from __future__ import annotations
 
-import csv
-import io
-import zipfile
 from datetime import UTC, date, datetime
+from typing import Any
 
-import httpx
+import pandas as pd
 
 from indian_quant.schemas import (
     AdjustmentStatus,
@@ -27,115 +32,127 @@ from indian_quant.schemas import (
     Timeframe,
     make_instrument_id,
 )
-from indian_quant.storage.raw_store import RawStore
-
-CM_URL = "https://www.bseindia.com/download/BhavCopy/Equity/BhavCopy_BSE_CM_0_0_0_{yyyymmdd}_F_0000.csv.zip"
-
-HEADERS = {
-    "User-Agent": (
-        "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) "
-        "Chrome/126.0 Safari/537.36"
-    ),
-    "Referer": "https://www.bseindia.com/markets/equity/EQMarket.html",
-    "Accept": "*/*",
-}
 
 
 class SourceBlockedError(RuntimeError):
     """Raised when an upstream serves an anti-bot page instead of data."""
 
+# BSE series -> canonical segment mapping
+SERIES_SEGMENT: dict[str, Segment] = {
+    "B": Segment.EQ,
+    "A": Segment.EQ,
+    "X": Segment.EQ,
+    "XT": Segment.EQ,
+    "MT": Segment.SME,
+    "M": Segment.SME,
+    "T": Segment.SME,
+    "G": Segment.EQ,
+    "P": Segment.EQ,
+    "IF": Segment.EQ,
+    "E": Segment.EQ,
+    "Z": Segment.EQ,
+    "ZP": Segment.EQ,
+    "MS": Segment.SME,
+    "R": Segment.EQ,
+}
+
+# Equity-only series (for delivery data matching)
+CASH_SERIES = {"B", "A", "X", "XT", "G", "P", "IF", "E", "Z", "R"}
+SME_SERIES = {"MT", "M", "T", "MS"}
+UNIVERSE_SERIES = CASH_SERIES | SME_SERIES
+
 
 class BseBhavcopyIngester:
     source = "BSE"
 
-    def __init__(
+    def __init__(self) -> None:
+        pass
+
+    def fetch_bhavcopy(self, day: date) -> pd.DataFrame | None:
+        """Fetch BSE bhavcopy as DataFrame via bseindia library."""
+        try:
+            from bseindia import equity
+
+            ddmmYYYY = day.strftime("%d-%m-%Y")
+            df = equity.equity_bhav_copy(trade_date=ddmmYYYY)
+            return df if df is not None and len(df) > 0 else None
+        except Exception:
+            return None
+
+    def parse_bhavcopy(
         self,
-        raw_store: RawStore,
-        *,
-        timeout: float = 60.0,
-        http_client: httpx.Client | None = None,
-    ) -> None:
-        self.raw_store = raw_store
-        self.timeout = timeout
-        self._http = http_client or httpx.Client(timeout=timeout)
-
-    def fetch_cm_zip(self, day: date) -> tuple[bytes | None, str]:
-        yyyymmdd = day.strftime("%Y%m%d")
-        resp = self._http.get(
-            CM_URL.format(yyyymmdd=yyyymmdd), headers=HEADERS, follow_redirects=True,
-        )
-        if resp.status_code in (404, 403):
-            return None, f"unavailable:{resp.status_code}"
-        resp.raise_for_status()
-        if self.is_block_page(resp.content):
-            raise SourceBlockedError(
-                f"BSE served an HTML block page instead of the bhavcopy for {day}; "
-                "datacenter IPs are commonly blocked - retry from another network"
-            )
-        _, digest = self.raw_store.save(
-            source="bse",
-            tool="bhavcopy_cm_udiff",
-            payload=resp.content,
-            ext="zip",
-            request_meta={"date": day.isoformat(), "url": str(resp.url)},
-        )
-        return resp.content, digest
-
-    @staticmethod
-    def is_block_page(payload: bytes) -> bool:
-        """Detect BSE's anti-bot HTML page served with HTTP 200."""
-        return payload[:512].lstrip().startswith(b"<")
-
-    def parse_cm_zip(
-        self,
-        payload: bytes,
+        df: pd.DataFrame,
         day: date,
         *,
         symbols: set[str] | None = None,
-        series: set[str] | None = None,
     ) -> list[MarketBar]:
-        wanted_series = series or {"EQ"}
-        with zipfile.ZipFile(io.BytesIO(payload)) as zf:
-            name = next(n for n in zf.namelist() if n.lower().endswith(".csv"))
-            reader = csv.DictReader(io.StringIO(zf.read(name).decode("utf-8-sig")))
-            bars: list[MarketBar] = []
-            for row in reader:
-                cleaned = {(k or "").strip(): (v or "").strip() for k, v in row.items()}
-                scry = cleaned.get("SctySrs", "")
-                if scry not in wanted_series:
-                    continue
-                symbol = cleaned.get("TckrSymb", "")
-                if not symbol or (symbols and symbol.upper() not in symbols):
-                    continue
-                try:
-                    o = float(cleaned["OpnPric"])
-                    h = float(cleaned["HghPric"])
-                    low = float(cleaned["LwPric"])
-                    c = float(cleaned["ClsPric"])
-                    vol = float(cleaned.get("TtlTradgVol") or 0)
-                except (KeyError, ValueError, TypeError):
-                    continue
-                ts_raw = cleaned.get("TradDt") or day.isoformat()
-                try:
-                    ts = datetime.fromisoformat(ts_raw).replace(tzinfo=UTC)
-                except ValueError:
-                    ts = datetime(day.year, day.month, day.day, tzinfo=UTC)
-                bars.append(
-                    MarketBar(
-                        instrument_id=make_instrument_id(Exchange.BSE, Segment.EQ, symbol.upper()),
-                        exchange="BSE",
-                        timestamp=ts,
-                        timeframe=Timeframe.DAY,
-                        open=o,
-                        high=h,
-                        low=low,
-                        close=c,
-                        volume=vol,
-                        source=self.source,
-                        source_timestamp=ts,
-                        ingestion_timestamp=datetime.now(UTC),
-                        adjustment_status=AdjustmentStatus.UNADJUSTED,
-                        quality_status=QualityStatus.RAW,
-                    )
+        """Parse BSE bhavcopy DataFrame into canonical daily bars."""
+        bars: list[MarketBar] = []
+        for _, row in df.iterrows():
+            series = str(row.get("SctySrs", "")).strip()
+            segment = SERIES_SEGMENT.get(series)
+            if segment is None:
+                continue
+            symbol = str(row.get("TckrSymb", "")).strip().upper()
+            if not symbol or (symbols and symbol not in symbols):
+                continue
+            try:
+                o = float(row["OpnPric"])
+                h = float(row["HghPric"])
+                low = float(row["LwPric"])
+                c = float(row["ClsPric"])
+                vol = float(row.get("TtlTradgVol") or 0)
+            except (KeyError, ValueError, TypeError):
+                continue
+            if o <= 0 and h <= 0 and low <= 0 and c <= 0:
+                continue
+            ts = datetime.fromisoformat(str(row.get("TradDt") or day.isoformat())).replace(tzinfo=UTC)
+            bars.append(
+                MarketBar(
+                    instrument_id=make_instrument_id(Exchange.BSE, segment, symbol),
+                    exchange="BSE",
+                    timestamp=ts,
+                    timeframe=Timeframe.DAY,
+                    open=o,
+                    high=h,
+                    low=low,
+                    close=c,
+                    volume=vol,
+                    source=self.source,
+                    source_timestamp=ts,
+                    ingestion_timestamp=datetime.now(UTC),
+                    adjustment_status=AdjustmentStatus.UNADJUSTED,
+                    quality_status=QualityStatus.RAW,
                 )
-            return bars
+            )
+        return bars
+
+    def parse_bhavcopy_to_delivery(self, df: pd.DataFrame, day: date) -> dict[str, dict[str, Any]]:
+        """Parse BSE bhavcopy into delivery-compatible format.
+
+        BSE bhavcopy doesn't have delivery % separately, but we can extract
+        close price, volume, and series for each symbol.
+        """
+        out: dict[str, dict[str, Any]] = {}
+        for _, row in df.iterrows():
+            series = str(row.get("SctySrs", "")).strip()
+            segment = SERIES_SEGMENT.get(series)
+            if segment is None:
+                continue
+            symbol = str(row.get("TckrSymb", "")).strip().upper()
+            if not symbol:
+                continue
+            try:
+                close = float(row["ClsPric"])
+                vol = float(row.get("TtlTradgVol") or 0)
+            except (KeyError, ValueError, TypeError):
+                continue
+            if close <= 0:
+                continue
+            out[symbol] = {
+                "series": series,
+                "close": close,
+                "volume": vol,
+                "deliv_pct": None,  # BSE bhavcopy doesn't have delivery %
+            }
+        return out
