@@ -92,6 +92,25 @@ def compute_signal_from_bars(parquet_path: Path, symbol: str, exchange: str) -> 
         prev_close = float(prev["close"]) if pd.notna(prev.get("close")) else close
         atr = float(last.get("atr_14", close * 0.03)) if pd.notna(last.get("atr_14")) else close * 0.03
 
+        signal_type = None
+        rsi_val = last.get("rsi")
+        prev_rsi = prev.get("rsi")
+        macd_val = last.get("macd")
+        macd_sig = last.get("macd_signal")
+        prev_macd = prev.get("macd")
+        prev_macd_sig = prev.get("macd_signal")
+
+        if pd.notna(rsi_val) and pd.notna(prev_rsi):
+            if rsi_val < 30 and prev_rsi >= 30:
+                signal_type = "rsi_oversold"
+            elif rsi_val > 70 and prev_rsi <= 70:
+                signal_type = "rsi_overbought"
+        if signal_type is None and pd.notna(macd_val) and pd.notna(macd_sig) and pd.notna(prev_macd) and pd.notna(prev_macd_sig):
+            if macd_val > macd_sig and prev_macd <= prev_macd_sig:
+                signal_type = "macd_bullish_x"
+            elif macd_val < macd_sig and prev_macd >= prev_macd_sig:
+                signal_type = "macd_bearish_x"
+
         return {
             "symbol": symbol,
             "exchange": exchange,
@@ -103,14 +122,14 @@ def compute_signal_from_bars(parquet_path: Path, symbol: str, exchange: str) -> 
             "deliv_pct": None,
             "deliv_z": None,
             "vol_z": round(float(last["vol_z"]), 2) if pd.notna(last.get("vol_z")) else None,
-            "rsi": round(float(last["rsi"]), 1) if pd.notna(last.get("rsi")) else None,
-            "macd": round(float(last["macd"]), 2) if pd.notna(last.get("macd")) else None,
-            "macd_signal": round(float(last["macd_signal"]), 2) if pd.notna(last.get("macd_signal")) else None,
+            "rsi": round(float(rsi_val), 1) if pd.notna(rsi_val) else None,
+            "macd": round(float(macd_val), 2) if pd.notna(macd_val) else None,
+            "macd_signal": round(float(macd_sig), 2) if pd.notna(macd_sig) else None,
             "sma_20": round(float(last["sma_20"]), 2) if pd.notna(last.get("sma_20")) else None,
             "sma_50": round(float(last["sma_50"]), 2) if pd.notna(last.get("sma_50")) else None,
             "atr_14": round(atr, 2),
             "hi_streak": 0,
-            "signal_type": None,  # No delivery z-score available
+            "signal_type": None,
             "entry_zone_low": round(close - atr * 0.5, 2),
             "entry_zone_high": round(close, 2),
             "stop_loss": round(close * 0.93, 2),
@@ -146,6 +165,25 @@ def compute_signal_for_stock(parquet_path: Path, symbol: str, exchange: str) -> 
                 signal_type = "dz_hi_dn"
             elif last["deliv_z"] <= -2 and last["ret_1d"] >= 0.005:
                 signal_type = "dz_lo_up"
+
+        if signal_type is None:
+            rsi = last.get("rsi")
+            prev_rsi = prev.get("rsi") if prev is not None else None
+            macd_val = last.get("macd")
+            macd_sig = last.get("macd_signal")
+            prev_macd = prev.get("macd") if prev is not None else None
+            prev_macd_sig = prev.get("macd_signal") if prev is not None else None
+
+            if pd.notna(rsi) and pd.notna(prev_rsi):
+                if rsi < 30 and prev_rsi >= 30:
+                    signal_type = "rsi_oversold"
+                elif rsi > 70 and prev_rsi <= 70:
+                    signal_type = "rsi_overbought"
+            if signal_type is None and pd.notna(macd_val) and pd.notna(macd_sig) and pd.notna(prev_macd) and pd.notna(prev_macd_sig):
+                if macd_val > macd_sig and prev_macd <= prev_macd_sig:
+                    signal_type = "macd_bullish_x"
+                elif macd_val < macd_sig and prev_macd >= prev_macd_sig:
+                    signal_type = "macd_bearish_x"
 
         close = float(last["close"])
         prev_close = float(prev["close"]) if pd.notna(prev.get("close")) else close
@@ -273,13 +311,20 @@ def main() -> int:
                 print(f"  {i+1}/{len(nse_files)} scanned, {len(signals)} signals ({time.time()-t0:.0f}s)", flush=True)
         print(f"NSE done: {len(signals)} signals ({time.time()-t0:.0f}s)", flush=True)
 
-    # BSE: skip until bars_1d backfill has 20+ days (RSI/MACD need 14+)
-    bse_skip = True
-    if not bse_skip and bse_dir.exists():
-        for p in sorted(bse_dir.glob("*.parquet")):
+    # BSE: bars_1d now backfilled with 67 days via yfinance
+    if bse_dir.exists():
+        bse_files = sorted(bse_dir.glob("*.parquet"))
+        bse_ok = sum(1 for p in bse_files if len(pd.read_parquet(p)) >= 20)
+        print(f"Scanning {len(bse_files)} BSE bars ({bse_ok} with 20+ bars)...", flush=True)
+        bse_count = 0
+        for i, p in enumerate(bse_files):
             sig = compute_signal_from_bars(p, p.stem, "BSE")
             if sig:
                 signals.append(sig)
+                bse_count += 1
+            if (i + 1) % 500 == 0:
+                print(f"  BSE {i+1}/{len(bse_files)} scanned, {bse_count} signals ({time.time()-t0:.0f}s)", flush=True)
+        print(f"BSE done: {bse_count} signals ({time.time()-t0:.0f}s)", flush=True)
 
     elapsed_scan = time.time() - t0
 
