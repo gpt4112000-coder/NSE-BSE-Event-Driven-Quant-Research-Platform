@@ -10,7 +10,7 @@
 {% if signals.buys %}
 <table><tr><th>#</th><th>Symbol</th><th>Segment</th><th>Close</th><th>Delivery %</th><th>Z-Score</th><th>1d Return</th></tr>
 {% for s in signals.buys %}
-<tr><td>{{ loop.index }}</td><td class="mono good">{{ s.symbol }}</td><td>{{ s.segment }}</td><td class="mono">₹{{ s.close }}</td><td class="mono">{{ s.deliv_pct }}%</td><td class="mono">{{ s.deliv_z }}</td><td>{% if s.ret_1d_pct > 0 %}+{% endif %}{{ s.ret_1d_pct }}%</td></tr>
+<tr><td>{{ loop.index }}</td><td class="mono good"><a href="/stock/{{ s.symbol }}" target="_blank" style="color:var(--green);text-decoration:underline">{{ s.symbol }}</a></td><td>{{ s.segment }}</td><td class="mono">₹{{ s.close }}</td><td class="mono">{{ s.deliv_pct }}%</td><td class="mono">{{ s.deliv_z }}</td><td>{% if s.ret_1d_pct > 0 %}+{% endif %}{{ s.ret_1d_pct }}%</td></tr>
 {% endfor %}</table>
 {% else %}<div class="empty">No accumulation signals today</div>{% endif %}
 
@@ -18,7 +18,7 @@
 <h2>🔴 Distribution / Avoid</h2>
 <table><tr><th>Symbol</th><th>Segment</th><th>Close</th><th>Delivery %</th><th>Z-Score</th><th>1d Return</th></tr>
 {% for s in signals.avoids %}
-<tr><td class="mono bad">{{ s.symbol }}</td><td>{{ s.segment }}</td><td class="mono">₹{{ s.close }}</td><td class="mono">{{ s.deliv_pct }}%</td><td class="mono warn">{{ s.deliv_z }}</td><td>{{ s.ret_1d_pct }}%</td></tr>
+<tr><td class="mono bad"><a href="/stock/{{ s.symbol }}" target="_blank" style="color:var(--red);text-decoration:underline">{{ s.symbol }}</a></td><td>{{ s.segment }}</td><td class="mono">₹{{ s.close }}</td><td class="mono">{{ s.deliv_pct }}%</td><td class="mono warn">{{ s.deliv_z }}</td><td>{{ s.ret_1d_pct }}%</td></tr>
 {% endfor %}</table>
 {% endif %}
 

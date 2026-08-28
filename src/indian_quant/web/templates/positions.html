@@ -15,7 +15,7 @@
 <h2>Open Positions</h2>
 <table><tr><th>Symbol</th><th>Side</th><th>Entry</th><th>Qty</th><th>Stop %</th><th>Horizon</th><th>Note</th></tr>
 {% for p in papers.open_positions %}
-<tr><td class="mono" style="color:var(--green)">{{ p.symbol }}</td><td>{{ p.side }}</td><td class="mono">₹{{ '%.2f'|format(p.close_at_signal) }}</td><td>{{ p.qty }}</td><td>{{ (p.stop_pct * 100)|int }}%</td><td>{{ p.horizon_days }}d</td><td class="mono" style="font-size:11px;color:var(--dim)">{{ p.note or '' }}</td></tr>
+<tr><td class="mono" style="color:var(--green)"><a href="/stock/{{ p.symbol }}" target="_blank" style="color:var(--green);text-decoration:underline">{{ p.symbol }}</a></td><td>{{ p.side }}</td><td class="mono">₹{{ '%.2f'|format(p.close_at_signal) }}</td><td>{{ p.qty }}</td><td>{{ (p.stop_pct * 100)|int }}%</td><td>{{ p.horizon_days }}d</td><td class="mono" style="font-size:11px;color:var(--dim)">{{ p.note or '' }}</td></tr>
 {% endfor %}</table>
 {% endif %}
 

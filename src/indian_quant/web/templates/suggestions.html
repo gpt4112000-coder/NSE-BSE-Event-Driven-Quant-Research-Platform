@@ -29,7 +29,7 @@
 {% for s in recent %}
 <tr>
 <td class="mono" style="white-space:nowrap;font-size:11px">{{ s.suggestion_date }}</td>
-<td class="mono {% if s.status == 'REALIZED' %}{% if s.hit %}good{% else %}bad{% endif %}{% endif %}" style="font-weight:bold">{{ s.symbol }}</td>
+<td class="mono {% if s.status == 'REALIZED' %}{% if s.hit %}good{% else %}bad{% endif %}{% endif %}" style="font-weight:bold"><a href="/stock/{{ s.symbol }}" target="_blank" style="color:inherit;text-decoration:underline">{{ s.symbol }}</a></td>
 <td class="mono">{{ s.signal_type }}</td>
 <td>{% if s.status == 'REALIZED' %}<span class="badge badge-green">✓</span>{% elif s.status == 'PENDING' %}<span class="badge badge-orange">⏳</span>{% else %}{{ s.status }}{% endif %}</td>
 <td class="mono">₹{{ '%.2f'|format(s.close_at_signal) }}</td>

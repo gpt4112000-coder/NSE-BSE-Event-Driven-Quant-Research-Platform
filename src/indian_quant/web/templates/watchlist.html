@@ -21,7 +21,7 @@
 {% set sig = signal_map.get(s.symbol, None) %}
 {% set sv = sig if sig else {} %}
 <tr>
-  <td><a href="/stock/{{ s.symbol }}" class="mono good" style="font-weight:bold;font-size:14px">{{ s.symbol }}</a></td>
+  <td><a href="/stock/{{ s.symbol }}" target="_blank" class="mono good" style="font-weight:bold;font-size:14px">{{ s.symbol }}</a></td>
   <td style="color:var(--dim)">{{ sv.segment if sv else 'EQ' }}</td>
   <td class="mono">{% if sv and sv.close %}₹{{ '%.2f'|format(sv.close) }}{% else %}—{% endif %}</td>
   <td class="mono">{% if sv and sv.deliv_z is not none %}<span class="{% if sv.deliv_z >= 2 %}good{% elif sv.deliv_z <= -2 %}bad{% else %}neutral{% endif %}">{{ '%.2f'|format(sv.deliv_z) }}</span>{% else %}—{% endif %}</td>
@@ -31,7 +31,7 @@
   <td class="mono">{% if sv and sv.rsi is not none %}{{ '%.0f'|format(sv.rsi) }}{% else %}—{% endif %}</td>
   <td class="mono" style="font-size:12px">{% if sv and sv.sma_20 is not none and sv.close %}{% if sv.close > sv.sma_20 %}<span class="good">Above</span>{% else %}<span class="bad">Below</span>{% endif %}{% else %}—{% endif %}</td>
   <td style="color:var(--faint);font-size:12px">{% if sv and sv.updated_at %}{{ sv.updated_at[:10] }}{% else %}—{% endif %}</td>
-  <td><a href="/stock/{{ s.symbol }}" style="font-size:12px;color:var(--blue)">Analyze →</a>
+  <td><a href="/stock/{{ s.symbol }}" target="_blank" style="font-size:12px;color:var(--blue)">Analyze →</a>
     <button onclick="removeStock('{{ s.symbol }}')" style="margin-left:8px;font-size:11px;color:var(--red);background:none;border:none;cursor:pointer">✕</button></td>
 </tr>
 {% endfor %}
