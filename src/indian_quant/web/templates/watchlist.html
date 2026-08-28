@@ -4,11 +4,12 @@
 {% block content %}
 <h1>My Watchlist <span style="font-size:14px;color:var(--dim);font-weight:normal">({{ stocks|length }} stocks)</span></h1>
 
-<div style="margin:20px 0;display:flex;gap:12px;align-items:center">
-  <input id="search-input" type="text" placeholder="Search NSE stocks..." autocomplete="off"
-    style="flex:1;max-width:400px;padding:10px 14px;background:var(--bg2);border:1px solid var(--line);border-radius:8px;color:var(--txt);font-size:14px;outline:none">
-  <div id="search-results" style="position:absolute;margin-top:40px;background:var(--panel);border:1px solid var(--line);border-radius:8px;display:none;max-height:300px;overflow-y:auto;z-index:100;width:400px"></div>
+<div style="margin:20px 0;display:flex;gap:12px;align-items:center;position:relative">
+  <input id="search-input" type="text" placeholder="Search NSE stocks... (e.g., RELIANCE, CIANAGRO, NEETUYOSHI)" autocomplete="off"
+    style="flex:1;max-width:500px;padding:10px 14px;background:var(--bg2);border:1px solid var(--line);border-radius:8px;color:var(--txt);font-size:14px;outline:none">
+  <div id="search-results" style="position:absolute;top:42px;left:0;background:var(--panel);border:1px solid var(--line);border-radius:8px;display:none;max-height:300px;overflow-y:auto;z-index:100;width:500px"></div>
   <button onclick="addSelected()" id="add-btn" style="padding:10px 20px;background:var(--green);color:#000;border:none;border-radius:8px;font-size:13px;font-weight:bold;cursor:pointer;opacity:0.5" disabled>+ Add</button>
+  <button onclick="addByName()" id="add-name-btn" style="padding:10px 14px;background:var(--blue);color:#000;border:none;border-radius:8px;font-size:13px;font-weight:bold;cursor:pointer" title="Add stock by typing exact NSE symbol name">+ Add by Name</button>
 </div>
 
 {% if stocks %}
@@ -86,6 +87,19 @@ function addSelected() {
   }).then(r => r.json()).then(d => {
     if (d.ok) location.reload();
     else alert(d.error || 'Failed to add');
+  });
+}
+
+function addByName() {
+  const sym = searchInput.value.trim().toUpperCase();
+  if (!sym || sym.length < 2) { alert('Type a stock symbol name first'); return; }
+  fetch('/api/watchlist/add', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({symbol: sym})
+  }).then(r => r.json()).then(d => {
+    if (d.ok) { location.reload(); }
+    else { alert(d.error || 'Failed to add — check symbol is valid NSE symbol'); }
   });
 }
 

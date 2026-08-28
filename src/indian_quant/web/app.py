@@ -263,6 +263,9 @@ async def api_watchlist_add(request: Request):
     notes = body.get("notes", "")
     if not symbol:
         return JSONResponse({"error": "symbol required"}, status_code=400)
+    # Allow any valid NSE symbol (letters, numbers, ampersand, hyphen)
+    if not all(c.isalnum() or c in ("&", "-", "_") for c in symbol):
+        return JSONResponse({"error": "Invalid symbol format"}, status_code=400)
     ws = _ws()
     try:
         wl_id = ws.add_stock(uid, symbol, notes)
@@ -302,15 +305,69 @@ async def api_search_stocks(q: str = "", limit: int = 20):
     if len(q) < 1:
         return JSONResponse([])
     settings = load_settings()
-    dl_dir = settings.normalized_dir / "delivery" / "NSE"
+    seen = set()
     matches = []
-    for p in sorted(dl_dir.glob("*.parquet")):
-        sym = p.stem
-        if q in sym:
-            matches.append({"symbol": sym, "exchange": "NSE", "segment": "EQ"})
-        if len(matches) >= limit:
-            break
-    return JSONResponse(matches)
+
+    # 1) Delivery parquet files (have data)
+    dl_dir = settings.normalized_dir / "delivery" / "NSE"
+    if dl_dir.exists():
+        for p in sorted(dl_dir.glob("*.parquet")):
+            sym = p.stem
+            if q in sym and sym not in seen:
+                matches.append({"symbol": sym, "exchange": "NSE", "segment": "EQ", "has_data": True})
+                seen.add(sym)
+            if len(matches) >= limit:
+                break
+
+    # 2) Universe registry (broader set, may not have data yet)
+    reg_path = settings.data_root / "universe" / "registry.json"
+    if reg_path.exists() and len(matches) < limit:
+        try:
+            import json as _json
+            reg = _json.loads(reg_path.read_text())
+            for sym, info in reg.get("symbols", {}).items():
+                if q in sym and sym not in seen:
+                    has_data = (dl_dir / f"{sym}.parquet").exists() if dl_dir.exists() else False
+                    matches.append({"symbol": sym, "exchange": "NSE",
+                                    "segment": info.get("segment", "EQ"), "has_data": has_data})
+                    seen.add(sym)
+                if len(matches) >= limit:
+                    break
+        except Exception:
+            pass
+
+    # 3) BSE delivery files
+    bse_dir = settings.normalized_dir / "delivery" / "BSE"
+    if bse_dir.exists() and len(matches) < limit:
+        for p in sorted(bse_dir.glob("*.parquet")):
+            sym = p.stem
+            if q in sym and sym not in seen:
+                matches.append({"symbol": sym, "exchange": "BSE", "segment": "EQ", "has_data": True})
+                seen.add(sym)
+            if len(matches) >= limit:
+                break
+
+    # 4) Instruments table (database)
+    if len(matches) < limit:
+        try:
+            import sqlite3 as _sq
+            db = Path(settings.storage.metadata_dsn.removeprefix("sqlite:///"))
+            if db.exists():
+                con = _sq.connect(str(db))
+                rows = con.execute(
+                    "SELECT DISTINCT symbol, exchange, segment FROM instruments WHERE symbol LIKE ? LIMIT ?",
+                    (f"%{q}%", limit),
+                ).fetchall()
+                con.close()
+                for sym, exch, seg in rows:
+                    if sym not in seen:
+                        has_data = (dl_dir / f"{sym}.parquet").exists() if dl_dir.exists() else False
+                        matches.append({"symbol": sym, "exchange": exch, "segment": seg, "has_data": has_data})
+                        seen.add(sym)
+        except Exception:
+            pass
+
+    return JSONResponse(matches[:limit])
 
 
 @app.get("/healthz")
