@@ -82,10 +82,10 @@ def get_latest_signals() -> dict[str, Any]:
     latest_date = ""
     for path in sorted(dl_dir.glob("*.parquet")):
         try:
-            raw = pd.read_parquet(path, columns=["date", "symbol", "segment", "close", "deliv_pct", "ret_1d"])
+            raw = pd.read_parquet(path, columns=["date", "symbol", "segment", "close", "deliv_pct", "volume"])
         except Exception:
             continue
-        if raw.empty or len(raw) < 40:
+        if raw.empty or len(raw) < 20:
             continue
         frame = raw.copy()
         frame["date_str"] = pd.to_datetime(frame["date"]).dt.strftime("%Y-%m-%d")
@@ -93,13 +93,14 @@ def get_latest_signals() -> dict[str, Any]:
         if d > latest_date:
             latest_date = d
         last = frame.iloc[-1]
+        prev = frame.iloc[-2] if len(frame) > 1 else frame.iloc[-1]
         deliv_series = pd.to_numeric(frame["deliv_pct"], errors="coerce").dropna()
         if len(deliv_series) < 15:
             continue
         mean = deliv_series.tail(30).mean()
         std = deliv_series.tail(30).std()
         z = (last["deliv_pct"] - mean) / std if std > 0 else np.nan
-        ret = float(last["close"].pct_change()) if len(frame) > 1 else 0.0
+        ret = (float(last["close"]) / float(prev["close"]) - 1.0) if float(prev["close"]) > 0 else 0.0
         rows.append({
             "symbol": str(last["symbol"]),
             "segment": str(last["segment"]) if "segment" in frame.columns else "EQ",
