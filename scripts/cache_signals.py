@@ -24,6 +24,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
+import numpy as np
 import pandas as pd
 
 from indian_quant.config import load_settings
@@ -34,6 +35,90 @@ from indian_quant.web.prod_config import (
     get_pg_engine,
     get_redis_client,
 )
+
+
+def compute_signal_from_bars(parquet_path: Path, symbol: str, exchange: str) -> dict | None:
+    """Compute technical signals from bars_1d OHLCV (no delivery z-score)."""
+    try:
+        raw = pd.read_parquet(parquet_path)
+        if raw.empty or len(raw) < 20:
+            return None
+
+        # Normalize columns for add_features
+        df = raw.copy()
+        df["date"] = pd.to_datetime(df["timestamp"]).dt.tz_localize(None)
+        df = df.sort_values("date").reset_index(drop=True)
+        df["segment"] = df.get("series", pd.Series("EQ", index=df.index))
+
+        # Compute returns
+        df["ret_1d"] = df["close"].pct_change()
+        df["log_ret"] = np.log(df["close"] / df["close"].shift(1))
+
+        # RSI
+        delta = df["close"].diff()
+        gain = delta.clip(lower=0).rolling(14).mean()
+        loss = (-delta.clip(upper=0)).rolling(14).mean()
+        rs = gain / loss.replace(0, np.nan)
+        df["rsi"] = 100 - 100 / (1 + rs)
+
+        # MACD
+        ema12 = df["close"].ewm(span=12, adjust=False).mean()
+        ema26 = df["close"].ewm(span=26, adjust=False).mean()
+        df["macd"] = ema12 - ema26
+        df["macd_signal"] = df["macd"].ewm(span=9, adjust=False).mean()
+
+        # SMA
+        df["sma_20"] = df["close"].rolling(20).mean()
+        df["sma_50"] = df["close"].rolling(50).mean()
+
+        # ATR
+        tr1 = df["high"] - df["low"]
+        tr2 = abs(df["high"] - df["close"].shift(1))
+        tr3 = abs(df["low"] - df["close"].shift(1))
+        df["atr_14"] = pd.concat([tr1, tr2, tr3], axis=1).max(axis=1).rolling(14).mean()
+
+        # Volume z-score
+        vol_ma = df["volume"].rolling(20).mean()
+        vol_std = df["volume"].rolling(20).std()
+        df["vol_z"] = (df["volume"] - vol_ma) / vol_std.replace(0, np.nan)
+
+        df = df.dropna(subset=["ret_1d", "rsi"]).tail(30)
+        if df.empty:
+            return None
+
+        last = df.iloc[-1]
+        prev = df.iloc[-2] if len(df) > 1 else df.iloc[-1]
+        close = float(last["close"])
+        prev_close = float(prev["close"]) if pd.notna(prev.get("close")) else close
+        atr = float(last.get("atr_14", close * 0.03)) if pd.notna(last.get("atr_14")) else close * 0.03
+
+        return {
+            "symbol": symbol,
+            "exchange": exchange,
+            "signal_date": str(last["date"].date()) if hasattr(last["date"], "date") else str(last["date"])[:10],
+            "segment": str(last.get("segment", "EQ")),
+            "close": round(close, 2),
+            "prev_close": round(prev_close, 2),
+            "ret_1d_pct": round((close / prev_close - 1) * 100, 2) if prev_close > 0 else 0,
+            "deliv_pct": None,
+            "deliv_z": None,
+            "vol_z": round(float(last["vol_z"]), 2) if pd.notna(last.get("vol_z")) else None,
+            "rsi": round(float(last["rsi"]), 1) if pd.notna(last.get("rsi")) else None,
+            "macd": round(float(last["macd"]), 2) if pd.notna(last.get("macd")) else None,
+            "macd_signal": round(float(last["macd_signal"]), 2) if pd.notna(last.get("macd_signal")) else None,
+            "sma_20": round(float(last["sma_20"]), 2) if pd.notna(last.get("sma_20")) else None,
+            "sma_50": round(float(last["sma_50"]), 2) if pd.notna(last.get("sma_50")) else None,
+            "atr_14": round(atr, 2),
+            "hi_streak": 0,
+            "signal_type": None,  # No delivery z-score available
+            "entry_zone_low": round(close - atr * 0.5, 2),
+            "entry_zone_high": round(close, 2),
+            "stop_loss": round(close * 0.93, 2),
+            "target_price": round(close * 1.05, 2),
+            "volume": float(last.get("volume", 0)) if pd.notna(last.get("volume")) else 0,
+        }
+    except Exception:
+        return None
 
 
 def compute_signal_for_stock(parquet_path: Path, symbol: str, exchange: str) -> dict | None:
@@ -172,20 +257,27 @@ def main() -> int:
 
     settings = load_settings()
     nse_dir = settings.normalized_dir / "delivery" / "NSE"
-    bse_dir = settings.normalized_dir / "delivery" / "BSE"
+    bse_dir = settings.normalized_dir / "bars_1d" / "BSE"  # BSE has no delivery data
 
     t0 = time.time()
     signals = []
 
     if nse_dir.exists():
-        for p in sorted(nse_dir.glob("*.parquet")):
+        nse_files = sorted(nse_dir.glob("*.parquet"))
+        print(f"Scanning {len(nse_files)} NSE parquets...", flush=True)
+        for i, p in enumerate(nse_files):
             sig = compute_signal_for_stock(p, p.stem, "NSE")
             if sig:
                 signals.append(sig)
+            if (i + 1) % 500 == 0:
+                print(f"  {i+1}/{len(nse_files)} scanned, {len(signals)} signals ({time.time()-t0:.0f}s)", flush=True)
+        print(f"NSE done: {len(signals)} signals ({time.time()-t0:.0f}s)", flush=True)
 
-    if bse_dir.exists():
+    # BSE: skip until bars_1d backfill has 20+ days (RSI/MACD need 14+)
+    bse_skip = True
+    if not bse_skip and bse_dir.exists():
         for p in sorted(bse_dir.glob("*.parquet")):
-            sig = compute_signal_for_stock(p, p.stem, "BSE")
+            sig = compute_signal_from_bars(p, p.stem, "BSE")
             if sig:
                 signals.append(sig)
 
