@@ -23,6 +23,7 @@ from indian_quant.web.auth import (
     require_login,
     verify_password,
 )
+from indian_quant.web.fast_loader import get_latest_signals_cached
 from indian_quant.web.watchlist_store import WatchlistStore
 
 app = FastAPI(title="NSE-BSE Quant Platform", docs_url=None, redoc_url=None)
@@ -40,7 +41,7 @@ def _ws() -> WatchlistStore:
 async def dashboard(request: Request):
     papers = dl.get_paper_summary()
     gate = dl.get_gate_progress()
-    signals = dl.get_latest_signals()
+    signals = get_latest_signals_cached()
     sugg = sl.get_suggestion_summary()
     uid = get_current_user_id(request)
     watchlist_count = 0
@@ -61,7 +62,7 @@ async def dashboard(request: Request):
 
 @app.get("/signals", response_class=HTMLResponse)
 async def signals_page(request: Request):
-    signals = dl.get_latest_signals()
+    signals = get_latest_signals_cached()
     return templates.TemplateResponse(request, "signals.html", {
         "request": request,
         "signals": signals,
