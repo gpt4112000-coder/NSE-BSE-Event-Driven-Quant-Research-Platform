@@ -15,9 +15,12 @@ from indian_quant.features.delivery import add_features, prepare_frame, signal_m
 def get_stock_analysis(symbol: str, user_id: int | None = None) -> dict[str, Any] | None:
     """Compute full analysis for a single symbol from its delivery parquet."""
     settings = load_settings()
-    parquet = settings.normalized_dir / "delivery" / "NSE" / f"{symbol.upper()}.parquet"
+    nse_parquet = settings.normalized_dir / "delivery" / "NSE" / f"{symbol.upper()}.parquet"
+    bse_parquet = settings.normalized_dir / "delivery" / "BSE" / f"{symbol.upper()}.parquet"
+    parquet = nse_parquet if nse_parquet.exists() else bse_parquet
     if not parquet.exists():
         return None
+    exchange = "NSE" if nse_parquet.exists() else "BSE"
 
     raw = pd.read_parquet(parquet)
     if raw.empty:
@@ -83,7 +86,7 @@ def get_stock_analysis(symbol: str, user_id: int | None = None) -> dict[str, Any
 
     result = {
         "symbol": symbol.upper(),
-        "exchange": "NSE",
+        "exchange": exchange,
         "segment": str(last.get("segment", "EQ")),
         "latest_date": str(pd.to_datetime(last["date"]).date()),
         "latest_close": close,

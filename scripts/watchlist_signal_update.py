@@ -14,7 +14,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 import pandas as pd
 
 from indian_quant.config import load_settings
-from indian_quant.features.delivery import add_features, prepare_frame, signal_mask
+from indian_quant.features.delivery import add_features, prepare_frame
 from indian_quant.web.watchlist_store import WatchlistStore
 
 
@@ -35,14 +35,17 @@ def main() -> int:
         ws.close()
         return 0
 
-    dl_dir = settings.normalized_dir / "delivery" / "NSE"
+    nse_dl_dir = settings.normalized_dir / "delivery" / "NSE"
+    bse_dl_dir = settings.normalized_dir / "delivery" / "BSE"
     total = 0
 
     for (user_id,) in rows:
         stocks = ws.list_stocks(user_id)
         for stock in stocks:
             symbol = stock["symbol"]
-            parquet = dl_dir / f"{symbol}.parquet"
+            nse_parquet = nse_dl_dir / f"{symbol}.parquet"
+            bse_parquet = bse_dl_dir / f"{symbol}.parquet"
+            parquet = nse_parquet if nse_parquet.exists() else bse_parquet
             if not parquet.exists():
                 continue
 
@@ -58,15 +61,15 @@ def main() -> int:
                     continue
 
                 last = frame.iloc[-1]
-                signals = signal_mask(frame)
-                last_signal = bool(signals.iloc[-1]) if len(signals) > 0 else False
 
                 signal_type = None
-                if last_signal:
-                    if pd.notna(last.get("deliv_z")) and last["deliv_z"] >= 2 and pd.notna(last.get("ret_1d")) and last["ret_1d"] >= 0.005:
+                if pd.notna(last.get("deliv_z")) and pd.notna(last.get("ret_1d")):
+                    if last["deliv_z"] >= 2 and last["ret_1d"] >= 0.005:
                         signal_type = "dz_hi_up"
-                    elif pd.notna(last.get("deliv_z")) and last["deliv_z"] >= 2 and pd.notna(last.get("ret_1d")) and last["ret_1d"] <= -0.005:
+                    elif last["deliv_z"] >= 2 and last["ret_1d"] <= -0.005:
                         signal_type = "dz_hi_dn"
+                    elif last["deliv_z"] <= -2 and last["ret_1d"] >= 0.005:
+                        signal_type = "dz_lo_up"
 
                 close = float(last["close"])
                 atr = float(last.get("atr_14", close * 0.03)) if pd.notna(last.get("atr_14")) else close * 0.03
